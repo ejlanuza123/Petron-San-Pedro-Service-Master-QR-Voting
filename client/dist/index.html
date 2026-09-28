@@ -80,7 +80,7 @@
             Voter Privacy & Anti-Fraud Notice
           </button>
           <span>&bull;</span>
-          <span class="text-slate-500">v1.2.0</span>
+          <span class="text-slate-500">v1.2.1</span>
         </div>
       </div>
     </footer>
@@ -538,8 +538,8 @@
               <p class="text-xs text-slate-400 mt-1">${state.campaign?.name || 'Active Campaign'} &bull; Database: <span class="font-mono text-emerald-400">trpzgmcyknhmqbnszeba.supabase.co</span></p>
             </div>
             <div class="flex items-center gap-2">
-              <button onclick="loadAdminData(); render()" class="px-3 py-1.5 bg-slate-900 border border-slate-700 text-xs font-semibold rounded-xl text-slate-300 hover:text-white flex items-center gap-1.5">
-                <span>🔄</span> Refresh Data
+              <button onclick="refreshAllData()" class="px-3 py-1.5 bg-slate-900 border border-slate-700 text-xs font-semibold rounded-xl text-slate-300 hover:text-white flex items-center gap-1.5 shadow-sm">
+                <span>🔄</span> Refresh from Cloud
               </button>
             </div>
           </div>
@@ -548,6 +548,10 @@
           <div class="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto text-xs font-semibold">
             <button onclick="state.adminTab = 'overview'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap ${state.adminTab === 'overview' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">Overview</button>
             <button onclick="state.adminTab = 'leaderboard'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap ${state.adminTab === 'leaderboard' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">Leaderboard</button>
+            <button onclick="state.adminTab = 'sms'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap flex items-center gap-1.5 ${state.adminTab === 'sms' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">
+              <span>Service Masters</span>
+              <span class="px-1.5 py-0.2 rounded-full bg-slate-700 text-slate-200 text-[10px] font-bold">${state.sms.length}</span>
+            </button>
             <button onclick="state.adminTab = 'fraud'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap flex items-center gap-1.5 ${state.adminTab === 'fraud' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">
               <span>Fraud Queue</span>
               ${state.flaggedVotes.length > 0 ? `<span class="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px]">${state.flaggedVotes.length}</span>` : ''}
@@ -559,6 +563,7 @@
           <!-- Tab Content -->
           ${state.adminTab === 'overview' ? renderDashboardOverviewContent(kpis, leaderboard) : ''}
           ${state.adminTab === 'leaderboard' ? renderLeaderboardContent(leaderboard) : ''}
+          ${state.adminTab === 'sms' ? renderSMsManagementContent() : ''}
           ${state.adminTab === 'fraud' ? renderFraudQueueContent() : ''}
           ${state.adminTab === 'qr' ? renderQRStudioContent() : ''}
           ${state.adminTab === 'rules' ? renderFraudRulesContent() : ''}
@@ -887,6 +892,163 @@
         render();
       } catch (err) {
         showToast(err.message, 'error');
+      }
+    }
+
+    async function refreshAllData() {
+      try {
+        await apiGet('/api/database/sync');
+        await loadAdminData();
+        render();
+        showToast('Successfully synchronized latest data from Supabase!', 'success');
+      } catch (err) {
+        showToast('Sync error: ' + err.message, 'error');
+      }
+    }
+
+    function renderSMsManagementContent() {
+      return `
+        <div class="space-y-6">
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-700">
+              <div>
+                <h3 class="font-bold text-white text-base flex items-center gap-2">
+                  <span>👥</span> Service Masters Management (Supabase)
+                </h3>
+                <p class="text-xs text-slate-400">All nominees below are stored in your cloud Supabase database (<span class="font-mono text-emerald-400">sms</span> table)</p>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <button onclick="clearSampleNominees()" class="px-3 py-2 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors">
+                  <span>🗑️</span> Remove Sample Nominees
+                </button>
+                <button onclick="document.getElementById('new-sm-modal').classList.remove('hidden'); document.getElementById('new-sm-modal').classList.add('flex')" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md">
+                  <span>➕</span> Add Service Master
+                </button>
+              </div>
+            </div>
+
+            <!-- SM List Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+              ${state.sms.map(s => `
+                <div class="bg-slate-900/90 border border-slate-750 rounded-2xl p-4 flex flex-col justify-between space-y-3 relative group">
+                  <div class="flex items-center gap-3">
+                    <img src="${s.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}" alt="${s.name}" class="w-12 h-12 rounded-xl object-cover border border-slate-700 bg-slate-800" />
+                    <div class="min-w-0 flex-1">
+                      <div class="font-bold text-white text-sm truncate">${s.name}</div>
+                      <div class="text-[11px] text-blue-400 font-semibold truncate">${s.station || 'Station'}</div>
+                      <div class="text-[10px] text-slate-400 truncate">${s.shift || 'Day Shift'}</div>
+                    </div>
+                  </div>
+                  ${s.bio ? `<p class="text-[11px] text-slate-300 line-clamp-2">${s.bio}</p>` : ''}
+                  <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[10px] text-slate-500">
+                    <span class="font-mono">${s.id}</span>
+                    <button onclick="deleteServiceMaster('${s.id}', '${s.name.replace(/'/g, "\\'")}')" class="text-rose-400 hover:text-rose-300 font-semibold hover:underline">
+                      Delete from Supabase
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            ${state.sms.length === 0 ? `
+              <div class="text-center py-12 text-slate-400 text-xs">
+                No Service Masters found. Click "Add Service Master" above to add real Petron San Pedro staff.
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Add SM Modal -->
+        <div id="new-sm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-xs text-slate-300 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 class="font-bold text-white text-sm">Add New Service Master</h3>
+              <button onclick="document.getElementById('new-sm-modal').classList.add('hidden'); document.getElementById('new-sm-modal').classList.remove('flex')" class="text-slate-400 hover:text-white">&times;</button>
+            </div>
+            <form onsubmit="handleCreateSM(event)" class="space-y-3">
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">Full Name *</label>
+                <input type="text" id="sm-add-name" required placeholder="e.g. Juan Dela Cruz" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+              </div>
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">Station / Assignment *</label>
+                <input type="text" id="sm-add-station" required placeholder="e.g. Pump Island 1 (Gasoline / Diesel)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+              </div>
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">Shift</label>
+                <input type="text" id="sm-add-shift" value="Day Shift (6AM - 2PM)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+              </div>
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">Photo URL (Optional)</label>
+                <input type="url" id="sm-add-photo" placeholder="https://..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+              </div>
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">Short Bio / Commendation</label>
+                <textarea id="sm-add-bio" rows="2" placeholder="Brief note about this staff member..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"></textarea>
+              </div>
+              <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button type="button" onclick="document.getElementById('new-sm-modal').classList.add('hidden'); document.getElementById('new-sm-modal').classList.remove('flex')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md">Save to Supabase</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleCreateSM(e) {
+      e.preventDefault();
+      const name = document.getElementById('sm-add-name').value.trim();
+      const station = document.getElementById('sm-add-station').value.trim();
+      const shift = document.getElementById('sm-add-shift').value.trim();
+      const photo_url = document.getElementById('sm-add-photo').value.trim();
+      const bio = document.getElementById('sm-add-bio').value.trim();
+
+      try {
+        await apiPost('/api/sms', {
+          name,
+          station,
+          shift,
+          photo_url: photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80',
+          bio,
+          branch: 'Petron San Pedro'
+        });
+        showToast(`Added ${name} to Supabase!`, 'success');
+        document.getElementById('new-sm-modal').classList.add('hidden');
+        document.getElementById('new-sm-modal').classList.remove('flex');
+        await refreshAllData();
+      } catch (err) {
+        showToast('Failed to add SM: ' + err.message, 'error');
+      }
+    }
+
+    async function deleteServiceMaster(id, name) {
+      if (!confirm(`Are you sure you want to delete ${name} from Supabase?`)) return;
+      try {
+        await fetch('/api/sms/' + id, {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + state.adminToken }
+        });
+        showToast(`Deleted ${name} from Supabase`, 'info');
+        await refreshAllData();
+      } catch (err) {
+        showToast('Delete error: ' + err.message, 'error');
+      }
+    }
+
+    async function clearSampleNominees() {
+      if (!confirm('This will remove the 6 sample placeholder nominees (Carlos, Maria, Jerome, etc.) from your Supabase database so you can add your real Petron San Pedro staff. Continue?')) return;
+      try {
+        const sampleIds = ['sm-001', 'sm-002', 'sm-003', 'sm-004', 'sm-005', 'sm-006'];
+        for (const id of sampleIds) {
+          await fetch('/api/sms/' + id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + state.adminToken }
+          });
+        }
+        showToast('Sample nominees deleted from Supabase!', 'success');
+        await refreshAllData();
+      } catch (err) {
+        showToast('Error removing samples: ' + err.message, 'error');
       }
     }
 

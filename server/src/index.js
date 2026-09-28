@@ -8,6 +8,7 @@ import db, { hashPassword, verifyPassword } from './db/database.js';
 import FraudEngine from './services/fraudEngine.js';
 import QRService from './services/qrService.js';
 import { generateToken } from './middleware/auth.js';
+import supabase, { isSupabaseConfigured } from './db/supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,6 +113,12 @@ const server = http.createServer((req, res) => {
       return res.json(db.getStatus());
     }
 
+    // 1c. Sync Database Live from Supabase
+    if (pathname === '/api/database/sync' && (method === 'POST' || method === 'GET')) {
+      const ok = await db.syncWithSupabase();
+      return res.json({ success: ok, status: db.getStatus() });
+    }
+
     // 2. Auth: Login
     if (pathname === '/api/auth/login' && method === 'POST') {
       const { username, password } = body;
@@ -213,6 +220,12 @@ const server = http.createServer((req, res) => {
     if (pathname === '/api/sms' && method === 'GET') {
       const branch = parsedUrl.searchParams.get('branch');
       const all = parsedUrl.searchParams.get('all') === 'true';
+      if (isSupabaseConfigured()) {
+        const liveSMs = await supabase.select('sms', 'order=name.asc');
+        if (Array.isArray(liveSMs)) {
+          db.data.sms = liveSMs;
+        }
+      }
       const sms = db.getSMs({ active: all ? undefined : true, branch });
       return res.json({ sms });
     }

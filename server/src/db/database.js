@@ -82,41 +82,28 @@ class Database {
 
       // 1. Sync Service Masters
       const sbSMs = await supabase.select('sms', 'order=name.asc');
-      if (sbSMs && sbSMs.length > 0) {
+      if (Array.isArray(sbSMs)) {
         this.data.sms = sbSMs;
         console.log(`[Supabase] Loaded ${sbSMs.length} Service Masters from Supabase.`);
-      } else if (this.data.sms.length > 0) {
-        console.log(`[Supabase] Seeding ${this.data.sms.length} Service Masters into Supabase...`);
-        for (const sm of this.data.sms) {
-          await supabase.insert('sms', sm);
-        }
       }
 
       // 2. Sync Campaigns
       const sbCampaigns = await supabase.select('campaigns');
-      if (sbCampaigns && sbCampaigns.length > 0) {
+      if (Array.isArray(sbCampaigns) && sbCampaigns.length > 0) {
         this.data.campaigns = sbCampaigns;
         console.log(`[Supabase] Loaded active campaign '${sbCampaigns[0].name}' from Supabase.`);
-      } else if (this.data.campaigns.length > 0) {
-        console.log(`[Supabase] Seeding default campaign into Supabase...`);
-        await supabase.insert('campaigns', this.data.campaigns[0]);
       }
 
       // 3. Sync Admins
       const sbAdmins = await supabase.select('admins');
-      if (sbAdmins && sbAdmins.length > 0) {
+      if (Array.isArray(sbAdmins) && sbAdmins.length > 0) {
         this.data.admins = sbAdmins;
         console.log(`[Supabase] Loaded ${sbAdmins.length} admin accounts from Supabase.`);
-      } else if (this.data.admins.length > 0) {
-        console.log(`[Supabase] Seeding default admin account into Supabase...`);
-        for (const admin of this.data.admins) {
-          await supabase.insert('admins', admin);
-        }
       }
 
       // 4. Sync Votes
       const sbVotes = await supabase.select('votes', 'order=timestamp.desc');
-      if (sbVotes && sbVotes.length > 0) {
+      if (Array.isArray(sbVotes)) {
         this.data.votes = sbVotes;
         console.log(`[Supabase] Loaded ${sbVotes.length} historical votes from Supabase.`);
       }
