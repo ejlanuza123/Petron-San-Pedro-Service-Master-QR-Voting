@@ -58,8 +58,8 @@ function escapeCSV(val) {
   return `"${str}"`;
 }
 
-// HTTP Server
-const server = http.createServer((req, res) => {
+// HTTP Server Request Handler (Supports both Node.js standalone and Vercel Serverless)
+export async function handleRequest(req, res) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -72,30 +72,41 @@ const server = http.createServer((req, res) => {
   }
 
   // Response helpers
-  res.json = (data, statusCode = 200) => {
-    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(data));
-  };
+  if (!res.json) {
+    res.json = (data, statusCode = 200) => {
+      res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    };
+  }
 
-  res.error = (message, statusCode = 400, code = 'ERROR') => {
-    res.json({ error: code, message }, statusCode);
-  };
+  if (!res.error) {
+    res.error = (message, statusCode = 400, code = 'ERROR') => {
+      res.json({ error: code, message }, statusCode);
+    };
+  }
 
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
   const method = req.method;
   const ip = getClientIP(req);
 
-  // Buffer request body
-  let bodyData = '';
-  req.on('data', chunk => { bodyData += chunk; });
-  req.on('end', async () => {
-    let body = {};
+  // Parse body safely (supports Vercel pre-parsed JSON and raw Node stream)
+  let body = {};
+  if (req.body && typeof req.body === 'object') {
+    body = req.body;
+  } else if (typeof req.body === 'string') {
+    try { body = JSON.parse(req.body); } catch {}
+  } else if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+    let bodyData = '';
+    for await (const chunk of req) {
+      bodyData += chunk;
+    }
     if (bodyData) {
       try { body = JSON.parse(bodyData); } catch {}
     }
+  }
 
-    console.log(`[${new Date().toISOString()}] ${method} ${pathname}`);
+  console.log(`[${new Date().toISOString()}] ${method} ${pathname}`);
 
     // --- API ROUTING ---
 
@@ -649,18 +660,24 @@ const server = http.createServer((req, res) => {
 
     // 404 for unhandled routes
     return res.error(`Route ${method} ${pathname} not found`, 404, 'NOT_FOUND');
-  });
-});
+}
 
-server.listen(PORT, () => {
-  console.log(`
+// HTTP Server
+export const server = http.createServer(handleRequest);
+
+// Only listen if executed directly (e.g. node src/index.js), not inside Vercel serverless functions
+if (!process.env.VERCEL) {
+  server.listen(PORT, () => {
+    console.log(`
 =============================================================
   Service Master QR Voting System - Enterprise Server
   Status: ONLINE
   Listening on: http://localhost:${PORT}
   Environment: ${process.env.NODE_ENV || 'production'}
 =============================================================
-  `);
-});
+    `);
+  });
+}
 
 export default server;
+
