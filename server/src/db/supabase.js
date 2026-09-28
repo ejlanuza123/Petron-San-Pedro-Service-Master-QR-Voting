@@ -1,11 +1,47 @@
-import dotenv from 'dotenv';
-dotenv.config();
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Load .env reliably without external dependencies
+function loadEnv() {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidatePaths = [
+    path.resolve(currentDir, '../../.env'),
+    path.resolve(process.cwd(), 'server/.env'),
+    path.resolve(process.cwd(), '.env')
+  ];
+
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const content = fs.readFileSync(p, 'utf-8');
+        for (const line of content.split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const idx = trimmed.indexOf('=');
+          if (idx !== -1) {
+            const key = trimmed.slice(0, idx).trim();
+            const val = trimmed.slice(idx + 1).trim().replace(/^['"](.*)['"]$/, '$1');
+            if (process.env[key] === undefined) {
+              process.env[key] = val;
+            }
+          }
+        }
+        break;
+      } catch (err) {
+        console.warn('Could not read .env:', err.message);
+      }
+    }
+  }
+}
+
+loadEnv();
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = () => {
-  return !!(SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.startsWith('https://'));
+  return !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY) && process.env.SUPABASE_URL.startsWith('https://'));
 };
 
 /**

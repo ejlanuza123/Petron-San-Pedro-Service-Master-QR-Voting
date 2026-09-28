@@ -80,7 +80,7 @@
             Voter Privacy & Anti-Fraud Notice
           </button>
           <span>&bull;</span>
-          <span class="text-slate-500">v1.1.0</span>
+          <span class="text-slate-500">v1.2.0</span>
         </div>
       </div>
     </footer>
@@ -528,11 +528,19 @@
         <div class="space-y-6">
           <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h1 class="text-xl font-extrabold text-white">Vote Monitoring & Fraud Audit Dashboard</h1>
-              <p class="text-xs text-slate-400 mt-0.5">${state.campaign?.name || 'Active Campaign'} &bull; Real-time sync</p>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h1 class="text-xl font-extrabold text-white">Vote Monitoring & Fraud Audit Dashboard</h1>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Supabase Live
+                </span>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">${state.campaign?.name || 'Active Campaign'} &bull; Database: <span class="font-mono text-emerald-400">trpzgmcyknhmqbnszeba.supabase.co</span></p>
             </div>
             <div class="flex items-center gap-2">
-              <button onclick="loadAdminData(); render()" class="px-3 py-1.5 bg-slate-900 border border-slate-700 text-xs font-semibold rounded-xl text-slate-300 hover:text-white">Refresh Data</button>
+              <button onclick="loadAdminData(); render()" class="px-3 py-1.5 bg-slate-900 border border-slate-700 text-xs font-semibold rounded-xl text-slate-300 hover:text-white flex items-center gap-1.5">
+                <span>🔄</span> Refresh Data
+              </button>
             </div>
           </div>
 

@@ -107,6 +107,11 @@ const server = http.createServer((req, res) => {
       });
     }
 
+    // 1b. Database Status (Supabase)
+    if (pathname === '/api/database/status' && method === 'GET') {
+      return res.json(db.getStatus());
+    }
+
     // 2. Auth: Login
     if (pathname === '/api/auth/login' && method === 'POST') {
       const { username, password } = body;

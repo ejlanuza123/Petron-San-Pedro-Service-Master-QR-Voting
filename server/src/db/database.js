@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import supabase, { isSupabaseConfigured } from './supabase.js';
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -31,7 +32,7 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// In-memory state synchronized atomically to disk
+// In-memory state synchronized atomically to disk and Supabase
 class Database {
   constructor() {
     this.data = {
@@ -41,6 +42,7 @@ class Database {
       admins: [],
       audit_logs: []
     };
+    this.supabaseConnected = false;
     this.init();
   }
 
@@ -61,6 +63,77 @@ class Database {
       }
     } else {
       this.seedDefaults();
+    }
+
+    // Connect & synchronize live with Supabase in the background
+    this.syncWithSupabase().catch(err => {
+      console.warn('[Database] Initial Supabase sync deferred:', err.message);
+    });
+  }
+
+  async syncWithSupabase() {
+    if (!isSupabaseConfigured()) {
+      console.log('[Database] Supabase is not configured. Running in local JSON storage mode.');
+      return false;
+    }
+
+    try {
+      console.log(`[Database] Connecting to Supabase (${process.env.SUPABASE_URL})...`);
+
+      // 1. Sync Service Masters
+      const sbSMs = await supabase.select('sms', 'order=name.asc');
+      if (sbSMs && sbSMs.length > 0) {
+        this.data.sms = sbSMs;
+        console.log(`[Supabase] Loaded ${sbSMs.length} Service Masters from Supabase.`);
+      } else if (this.data.sms.length > 0) {
+        console.log(`[Supabase] Seeding ${this.data.sms.length} Service Masters into Supabase...`);
+        for (const sm of this.data.sms) {
+          await supabase.insert('sms', sm);
+        }
+      }
+
+      // 2. Sync Campaigns
+      const sbCampaigns = await supabase.select('campaigns');
+      if (sbCampaigns && sbCampaigns.length > 0) {
+        this.data.campaigns = sbCampaigns;
+        console.log(`[Supabase] Loaded active campaign '${sbCampaigns[0].name}' from Supabase.`);
+      } else if (this.data.campaigns.length > 0) {
+        console.log(`[Supabase] Seeding default campaign into Supabase...`);
+        await supabase.insert('campaigns', this.data.campaigns[0]);
+      }
+
+      // 3. Sync Admins
+      const sbAdmins = await supabase.select('admins');
+      if (sbAdmins && sbAdmins.length > 0) {
+        this.data.admins = sbAdmins;
+        console.log(`[Supabase] Loaded ${sbAdmins.length} admin accounts from Supabase.`);
+      } else if (this.data.admins.length > 0) {
+        console.log(`[Supabase] Seeding default admin account into Supabase...`);
+        for (const admin of this.data.admins) {
+          await supabase.insert('admins', admin);
+        }
+      }
+
+      // 4. Sync Votes
+      const sbVotes = await supabase.select('votes', 'order=timestamp.desc');
+      if (sbVotes && sbVotes.length > 0) {
+        this.data.votes = sbVotes;
+        console.log(`[Supabase] Loaded ${sbVotes.length} historical votes from Supabase.`);
+      }
+
+      this.save();
+      this.supabaseConnected = true;
+      console.log('=============================================================');
+      console.log('  [Supabase] LIVE SYNC COMPLETE: APP CONNECTED TO SUPABASE!  ');
+      console.log(`  Database URL: ${process.env.SUPABASE_URL}`);
+      console.log(`  Service Masters: ${this.data.sms.length}`);
+      console.log(`  Votes: ${this.data.votes.length}`);
+      console.log('=============================================================');
+      return true;
+    } catch (err) {
+      console.error('[Supabase Sync Error]:', err.message);
+      this.supabaseConnected = false;
+      return false;
     }
   }
 
@@ -313,7 +386,7 @@ class Database {
       id: smData.id || `sm-${Date.now().toString(36)}`,
       name: smData.name,
       photo_url: smData.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=500&q=80',
-      branch: smData.branch || 'San Pedro Main',
+      branch: smData.branch || 'Petron San Pedro',
       station: smData.station || 'Bay 1',
       shift: smData.shift || 'Day Shift',
       bio: smData.bio || '',
@@ -325,6 +398,13 @@ class Database {
     };
     this.data.sms.push(newSM);
     this.save();
+
+    if (isSupabaseConfigured()) {
+      supabase.insert('sms', newSM).catch(err =>
+        console.error('[Supabase SM Insert Error]:', err.message)
+      );
+    }
+
     return newSM;
   }
 
@@ -337,6 +417,13 @@ class Database {
       updated_at: new Date().toISOString()
     };
     this.save();
+
+    if (isSupabaseConfigured()) {
+      supabase.update('sms', id, { ...updates, updated_at: new Date().toISOString() }).catch(err =>
+        console.error('[Supabase SM Update Error]:', err.message)
+      );
+    }
+
     return this.data.sms[index];
   }
 
@@ -345,6 +432,13 @@ class Database {
     if (index === -1) return false;
     this.data.sms.splice(index, 1);
     this.save();
+
+    if (isSupabaseConfigured()) {
+      supabase.delete('sms', id).catch(err =>
+        console.error('[Supabase SM Delete Error]:', err.message)
+      );
+    }
+
     return true;
   }
 
@@ -361,6 +455,13 @@ class Database {
       ...updates
     };
     this.save();
+
+    if (isSupabaseConfigured()) {
+      supabase.update('campaigns', id, updates).catch(err =>
+        console.error('[Supabase Campaign Update Error]:', err.message)
+      );
+    }
+
     return this.data.campaigns[index];
   }
 
@@ -384,6 +485,32 @@ class Database {
     };
     this.data.votes.push(vote);
     this.save();
+
+    // Persist directly to Supabase
+    if (isSupabaseConfigured()) {
+      const payload = {
+        id: vote.id,
+        sm_id: vote.sm_id,
+        voter_fingerprint: vote.voter_fingerprint,
+        ip_address: vote.ip_address,
+        user_agent: vote.user_agent,
+        timestamp: vote.timestamp,
+        mode: vote.mode,
+        branch: vote.branch,
+        status: vote.status,
+        flag_reason: vote.flag_reason,
+        reviewed_by: vote.reviewed_by,
+        reviewed_at: vote.reviewed_at,
+        review_notes: vote.review_notes,
+        is_test: vote.is_test
+      };
+      supabase.insert('votes', payload).then(res => {
+        if (res) console.log(`[Supabase] Vote ${vote.id} persisted to Supabase successfully.`);
+      }).catch(err => {
+        console.error('[Supabase Vote Save Error]:', err.message);
+      });
+    }
+
     return vote;
   }
 
@@ -438,6 +565,16 @@ class Database {
     vote.reviewed_at = new Date().toISOString();
     if (review_notes !== undefined) vote.review_notes = review_notes;
     this.save();
+
+    if (isSupabaseConfigured()) {
+      supabase.update('votes', id, {
+        status: vote.status,
+        reviewed_by: vote.reviewed_by,
+        reviewed_at: vote.reviewed_at,
+        review_notes: vote.review_notes
+      }).catch(err => console.error('[Supabase Vote Status Update Error]:', err.message));
+    }
+
     return vote;
   }
 
@@ -484,6 +621,12 @@ class Database {
     if (admin) {
       admin.last_login = new Date().toISOString();
       this.save();
+
+      if (isSupabaseConfigured()) {
+        supabase.update('admins', id, { last_login: admin.last_login }).catch(err =>
+          console.error('[Supabase Admin Login Update Error]:', err.message)
+        );
+      }
     }
   }
 
@@ -499,6 +642,13 @@ class Database {
     };
     this.data.audit_logs.push(log);
     this.save();
+
+    if (isSupabaseConfigured()) {
+      supabase.insert('audit_logs', log).catch(err =>
+        console.error('[Supabase Audit Log Error]:', err.message)
+      );
+    }
+
     return log;
   }
 
@@ -506,6 +656,17 @@ class Database {
     return [...this.data.audit_logs]
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(0, limit);
+  }
+
+  getStatus() {
+    return {
+      connected: this.supabaseConnected || isSupabaseConfigured(),
+      provider: 'supabase',
+      database_url: process.env.SUPABASE_URL || 'local-fallback',
+      sms_count: this.data.sms.length,
+      votes_count: this.data.votes.length,
+      campaign: this.getActiveCampaign()?.name || 'Active'
+    };
   }
 }
 
