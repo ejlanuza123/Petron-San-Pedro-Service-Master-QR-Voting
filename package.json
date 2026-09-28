@@ -1,6 +1,6 @@
 {
   "name": "sm-voting-system",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "QR-Based Voting System for Service Master (SM) of the Month with Fraud Detection & Admin Monitoring",
   "private": true,
   "scripts": {

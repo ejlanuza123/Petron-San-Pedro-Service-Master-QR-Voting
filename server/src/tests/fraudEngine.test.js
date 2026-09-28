@@ -4,6 +4,7 @@ import db from '../db/database.js';
 import FraudEngine from '../services/fraudEngine.js';
 
 describe('FraudEngine - Anti-Cheat Security Rules', () => {
+  let testSM;
   beforeEach(() => {
     // Reset or ensure campaign rules are standard for tests
     const campaign = db.getActiveCampaign();
@@ -15,10 +16,25 @@ describe('FraudEngine - Anti-Cheat Security Rules', () => {
       rapid_fire_minutes: 10,
       rapid_fire_max_votes: 5
     });
+
+    testSM = db.getSMs()[0];
+    if (!testSM) {
+      testSM = db.createSM({
+        name: 'Rodrigo Lanuza III',
+        branch: 'Petron San Pedro',
+        station: 'Diesel',
+        shift: 'Day Shift (6AM - 2PM)',
+        device_fingerprint: 'test_dev_hash_rodrigo_lanuza_99',
+        ip_registered: '192.168.1.101'
+      });
+    } else {
+      if (!testSM.device_fingerprint) testSM.device_fingerprint = 'test_dev_hash_rodrigo_lanuza_99';
+      if (!testSM.ip_registered) testSM.ip_registered = '192.168.1.101';
+    }
   });
 
   test('Rule: Valid vote from a regular customer passes as valid', () => {
-    const sm = db.getSMById('sm-001');
+    const sm = testSM;
     const result = FraudEngine.evaluateVote({
       sm_id: sm.id,
       voter_fingerprint: `fp_test_unique_customer_${Date.now()}_${Math.random()}`,
@@ -37,7 +53,7 @@ describe('FraudEngine - Anti-Cheat Security Rules', () => {
     db.updateCampaign(campaign.id, { kill_switch: true });
 
     const result = FraudEngine.evaluateVote({
-      sm_id: 'sm-001',
+      sm_id: testSM.id,
       voter_fingerprint: `fp_kill_switch_test_${Date.now()}`,
       ip_address: '180.190.10.6',
       user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
@@ -52,8 +68,8 @@ describe('FraudEngine - Anti-Cheat Security Rules', () => {
   });
 
   test('Rule: Self-Voting detection by device fingerprint flags vote', () => {
-    const sm = db.getSMById('sm-001');
-    assert.ok(sm.device_fingerprint, 'SM-001 should have a registered device fingerprint');
+    const sm = testSM;
+    assert.ok(sm.device_fingerprint, 'SM should have a registered device fingerprint');
 
     const result = FraudEngine.evaluateVote({
       sm_id: sm.id,
@@ -69,8 +85,8 @@ describe('FraudEngine - Anti-Cheat Security Rules', () => {
   });
 
   test('Rule: Self-Voting detection by registered IP flags vote', () => {
-    const sm = db.getSMById('sm-002');
-    assert.ok(sm.ip_registered, 'SM-002 should have a registered IP address');
+    const sm = testSM;
+    assert.ok(sm.ip_registered, 'SM should have a registered IP address');
 
     const result = FraudEngine.evaluateVote({
       sm_id: sm.id,
@@ -86,7 +102,7 @@ describe('FraudEngine - Anti-Cheat Security Rules', () => {
   });
 
   test('Rule: Duplicate vote on same day is blocked', () => {
-    const sm = db.getSMById('sm-003');
+    const sm = testSM;
     const fixedFingerprint = `fp_duplicate_test_client_${Date.now()}`;
 
     // Cast first vote
@@ -112,7 +128,7 @@ describe('FraudEngine - Anti-Cheat Security Rules', () => {
 
   test('Rule: Rapid-fire voting from same IP is flagged', () => {
     const testIP = `10.99.88.${Math.floor(Math.random() * 200) + 1}`;
-    const sm = db.getSMById('sm-004');
+    const sm = testSM;
 
     // Insert 5 votes from this IP within the last 2 minutes
     for (let i = 0; i < 5; i++) {

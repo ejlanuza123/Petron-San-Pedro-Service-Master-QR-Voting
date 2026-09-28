@@ -80,7 +80,7 @@
             Voter Privacy & Anti-Fraud Notice
           </button>
           <span>&bull;</span>
-          <span class="text-slate-500">v1.2.1</span>
+          <span class="text-slate-500">v1.2.2</span>
         </div>
       </div>
     </footer>
@@ -740,11 +740,14 @@
                 <span class="text-[10px] font-bold text-slate-800 mt-2 uppercase tracking-wider">Scan to Open Ballot</span>
               </div>
 
-              <div class="w-full flex items-center justify-center gap-2 pt-1">
-                <a href="/api/qr/general" target="_blank" download="petron-san-pedro-mode-a-qr.svg" class="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-xs font-semibold rounded-xl text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors">
+              <div class="w-full flex items-center justify-center gap-2 pt-1 flex-wrap">
+                <button onclick="downloadGeneralQR()" class="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-xs font-semibold rounded-xl text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors shadow-sm">
                   <span>⬇️</span> Download SVG
-                </a>
-                <button onclick="window.open('/vote', '_blank')" class="px-4 py-2 bg-blue-950/60 hover:bg-blue-900/60 text-xs font-semibold rounded-xl text-blue-300 border border-blue-800/40 flex items-center gap-1.5 transition-colors">
+                </button>
+                <button onclick="downloadGeneralPNG()" class="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-xs font-semibold rounded-xl text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors shadow-sm">
+                  <span>🖼️</span> Download PNG
+                </button>
+                <button onclick="window.open('/vote', '_blank')" class="px-3 py-2 bg-blue-950/60 hover:bg-blue-900/60 text-xs font-semibold rounded-xl text-blue-300 border border-blue-800/40 flex items-center gap-1.5 transition-colors">
                   <span>↗️</span> Test Voting Link
                 </button>
               </div>
@@ -770,11 +773,14 @@
                 <span id="sm-badge-caption" class="text-[10px] font-bold text-slate-800 mt-2 uppercase tracking-wider">${firstSM.name || 'Direct Vote Badge'}</span>
               </div>
 
-              <div class="w-full flex items-center justify-center gap-2 pt-1">
-                <button onclick="downloadCurrentSMQR()" class="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-xs font-semibold rounded-xl text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors">
-                  <span>⬇️</span> Download Badge
+              <div class="w-full flex items-center justify-center gap-2 pt-1 flex-wrap">
+                <button onclick="downloadCurrentSMQR(false)" class="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-xs font-semibold rounded-xl text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors shadow-sm">
+                  <span>⬇️</span> Download QR (SVG)
                 </button>
-                <button onclick="testCurrentSMVote()" class="px-4 py-2 bg-emerald-950/60 hover:bg-emerald-900/60 text-xs font-semibold rounded-xl text-emerald-300 border border-emerald-800/40 flex items-center gap-1.5 transition-colors">
+                <button onclick="downloadCurrentSMQR(true)" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded-xl text-white flex items-center gap-1.5 transition-colors shadow-md">
+                  <span>🪪</span> Download ID Badge Card (PNG)
+                </button>
+                <button onclick="testCurrentSMVote()" class="px-3 py-2 bg-emerald-950/60 hover:bg-emerald-900/60 text-xs font-semibold rounded-xl text-emerald-300 border border-emerald-800/40 flex items-center gap-1.5 transition-colors">
                   <span>↗️</span> Test Direct Vote
                 </button>
               </div>
@@ -792,12 +798,189 @@
       if (caption && sm) caption.innerText = sm.name;
     }
 
-    function downloadCurrentSMQR() {
+    async function downloadGeneralQR() {
+      try {
+        const res = await fetch('/api/qr/general');
+        const svgText = await res.text();
+        const blob = new Blob([svgText], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'petron-san-pedro-general-voting-qr.svg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Downloaded General Voting QR code!', 'success');
+      } catch (err) {
+        showToast('Download error: ' + err.message, 'error');
+      }
+    }
+
+    async function downloadGeneralPNG() {
+      try {
+        const res = await fetch('/api/qr/general');
+        const svgText = await res.text();
+        const img = new Image();
+        const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1000;
+          canvas.height = 1000;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, 1000, 1000);
+          ctx.drawImage(img, 50, 50, 900, 900);
+          URL.revokeObjectURL(url);
+          canvas.toBlob(blob => {
+            const a = document.createElement('a');
+            a.download = 'petron-san-pedro-general-voting-qr.png';
+            a.href = URL.createObjectURL(blob);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('Downloaded General Voting QR (PNG)!', 'success');
+          }, 'image/png');
+        };
+        img.src = url;
+      } catch (err) {
+        showToast('Download error: ' + err.message, 'error');
+      }
+    }
+
+    async function downloadCurrentSMQR(asCard = false) {
       const select = document.getElementById('sm-badge-select');
       const smId = select ? select.value : (state.sms[0]?.id || '');
-      if (smId) {
-        window.open('/api/qr/sm/' + smId, '_blank');
+      if (!smId) return;
+
+      const sm = state.sms.find(s => s.id === smId) || { name: 'Service Master', station: 'Service Station', branch: 'Petron San Pedro' };
+      const safeName = sm.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+      try {
+        const res = await fetch(`/api/qr/sm/${smId}`);
+        const svgText = await res.text();
+
+        if (!asCard) {
+          // Direct file download of pure QR code (without opening another tab)
+          const blob = new Blob([svgText], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `petron-sm-${safeName}-qr.svg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showToast(`Downloaded QR code for ${sm.name}!`, 'success');
+        } else {
+          // Generate full ready-to-print ID Badge Card on canvas
+          generateAndDownloadBadgeCard(sm, svgText);
+        }
+      } catch (err) {
+        showToast('Download error: ' + err.message, 'error');
       }
+    }
+
+    function generateAndDownloadBadgeCard(sm, svgText) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 600;
+      canvas.height = 900;
+      const ctx = canvas.getContext('2d');
+
+      // 1. Badge Background
+      const grad = ctx.createLinearGradient(0, 0, 0, 900);
+      grad.addColorStop(0, '#00205B');
+      grad.addColorStop(0.35, '#003882');
+      grad.addColorStop(1, '#0f172a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 600, 900);
+
+      // Top corporate badge accent bar
+      ctx.fillStyle = '#EF4444'; // Petron Red accent
+      ctx.fillRect(0, 0, 600, 14);
+
+      // Header Lanyard Punch Hole Indicator
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath();
+      ctx.arc(300, 36, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Company Branding
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('PETRON SAN PEDRO', 300, 85);
+
+      ctx.fillStyle = '#93c5fd';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText('SERVICE MASTER OF THE MONTH', 300, 110);
+
+      // Card Body Container (White card for maximum QR contrast)
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(40, 135, 520, 710, 24);
+      ctx.fill();
+
+      // Employee Name
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText(sm.name || 'Service Master', 300, 190);
+
+      // Station / Shift
+      ctx.fillStyle = '#003882';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText(sm.station || 'Station Service Master', 300, 220);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '13px sans-serif';
+      ctx.fillText(sm.shift || 'Day Shift', 300, 245);
+
+      // Divider line
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(80, 265);
+      ctx.lineTo(520, 265);
+      ctx.stroke();
+
+      // Draw QR Code onto canvas
+      const img = new Image();
+      const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+      const DOMURL = window.URL || window.webkitURL || window;
+      const url = DOMURL.createObjectURL(svgBlob);
+
+      img.onload = function() {
+        ctx.drawImage(img, 100, 285, 400, 400);
+        DOMURL.revokeObjectURL(url);
+
+        // QR Call to action text
+        ctx.fillStyle = '#003882';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText('SCAN WITH PHONE TO VOTE', 300, 725);
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Fast & Secure Voting • Petron San Pedro', 300, 750);
+
+        // Staff ID
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px monospace';
+        ctx.fillText('ID: ' + (sm.id || 'SM-001'), 300, 810);
+
+        // Convert canvas to PNG and trigger immediate download
+        canvas.toBlob(blob => {
+          const a = document.createElement('a');
+          const safeName = (sm.name || 'sm').toLowerCase().replace(/[^a-z0-9]/g, '-');
+          a.download = `petron-id-badge-${safeName}.png`;
+          a.href = URL.createObjectURL(blob);
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          showToast(`Downloaded ready-to-print ID Badge Card for ${sm.name}!`, 'success');
+        }, 'image/png');
+      };
+      img.src = url;
     }
 
     function testCurrentSMVote() {

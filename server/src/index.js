@@ -425,10 +425,11 @@ const server = http.createServer((req, res) => {
         return res.json(data);
       }
 
+      const isDownload = parsedUrl.searchParams.get('download') === 'true';
       res.writeHead(200, {
         'Content-Type': 'image/svg+xml',
         'Cache-Control': 'no-cache',
-        'Content-Disposition': 'inline; filename="general-voting-qr.svg"'
+        'Content-Disposition': `${isDownload ? 'attachment' : 'inline'}; filename="general-voting-qr.svg"`
       });
       return res.end(data.svg);
     }
@@ -447,10 +448,12 @@ const server = http.createServer((req, res) => {
         return res.json({ ...data, sm });
       }
 
+      const isDownload = parsedUrl.searchParams.get('download') === 'true';
+      const safeName = sm.name ? sm.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : sm.id;
       res.writeHead(200, {
         'Content-Type': 'image/svg+xml',
         'Cache-Control': 'no-cache',
-        'Content-Disposition': `inline; filename="sm-${sm.id}-qr.svg"`
+        'Content-Disposition': `${isDownload ? 'attachment' : 'inline'}; filename="petron-badge-${safeName}-qr.svg"`
       });
       return res.end(data.svg);
     }

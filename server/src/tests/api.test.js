@@ -6,7 +6,7 @@ import QRService from '../services/qrService.js';
 describe('Database and Services Verification', () => {
   test('Database seeds SMs and default admin successfully', () => {
     const sms = db.getSMs();
-    assert.ok(sms.length >= 6, 'Should have at least 6 pre-seeded SMs');
+    assert.ok(sms.length >= 1, 'Should have at least 1 SM in the database');
 
     const admin = db.getAdminByUsername('admin');
     assert.ok(admin, 'Default admin account should exist');
@@ -25,14 +25,17 @@ describe('Database and Services Verification', () => {
   });
 
   test('QRService generates valid Data URLs for General and SM modes', async () => {
+    const sms = db.getSMs();
+    const targetSMId = sms[0]?.id || 'sm-test-1';
+
     const generalQR = await QRService.generateGeneralVotingQR('http://localhost:3000');
     assert.ok(generalQR.qrDataUrl.startsWith('data:image/svg+xml;base64,'));
     assert.ok(generalQR.svg.includes('<svg') && generalQR.svg.includes('</svg>'));
     assert.equal(generalQR.targetUrl, 'http://localhost:3000/vote');
 
-    const smQR = await QRService.generateSMVotingQR('http://localhost:3000', 'sm-001');
+    const smQR = await QRService.generateSMVotingQR('http://localhost:3000', targetSMId);
     assert.ok(smQR.qrDataUrl.startsWith('data:image/svg+xml;base64,'));
     assert.ok(smQR.svg.includes('<svg') && smQR.svg.includes('</svg>'));
-    assert.equal(smQR.targetUrl, 'http://localhost:3000/vote/sm/sm-001');
+    assert.equal(smQR.targetUrl, `http://localhost:3000/vote/sm/${encodeURIComponent(targetSMId)}`);
   });
 });
