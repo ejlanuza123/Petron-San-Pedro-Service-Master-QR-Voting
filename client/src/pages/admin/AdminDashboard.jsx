@@ -1,0 +1,220 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  LayoutDashboard, Award, BarChart3, ShieldAlert, FileText, 
+  QrCode, Users, Settings, RefreshCw, Power, Sparkles 
+} from 'lucide-react';
+import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+
+// Subviews
+import DashboardOverview from './DashboardOverview';
+import LeaderboardView from './LeaderboardView';
+import AnalyticsView from './AnalyticsView';
+import FraudQueuePage from './FraudQueuePage';
+import AuditLogPage from './AuditLogPage';
+import QRStudioPage from './QRStudioPage';
+import SMManagementPage from './SMManagementPage';
+import SettingsPage from './SettingsPage';
+
+export default function AdminDashboard({ onLogout }) {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [stats, setStats] = useState(null);
+  const [campaign, setCampaign] = useState(null);
+  const [sms, setSms] = useState([]);
+  const [flaggedVotes, setFlaggedVotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const { user } = useAuth();
+  const { success, error, warning } = useToast();
+
+  const loadData = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const [statsRes, campRes, smsRes, flaggedRes] = await Promise.all([
+        api.getStats(),
+        api.getCampaign(),
+        api.getSMs({ all: true }),
+        api.getFlaggedVotes()
+      ]);
+
+      setStats(statsRes);
+      setCampaign(campRes.campaign);
+      setSms(smsRes.sms || []);
+      setFlaggedVotes(flaggedRes.flagged || []);
+    } catch (err) {
+      if (!silent) error(err.message || 'Failed to refresh admin data');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    // Poll every 15s for real-time monitoring
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleToggleKillSwitch = async () => {
+    try {
+      const res = await api.toggleKillSwitch();
+      warning(res.message);
+      loadData(true);
+    } catch (err) {
+      error(err.message || 'Failed to toggle kill switch');
+    }
+  };
+
+  const handleToggleTestMode = async () => {
+    try {
+      const res = await api.toggleTestMode();
+      success(res.message);
+      loadData(true);
+    } catch (err) {
+      error(err.message || 'Failed to toggle test mode');
+    }
+  };
+
+  const branches = [...new Set(sms.map(s => s.branch))];
+
+  const navItems = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'leaderboard', label: 'Leaderboard', icon: Award },
+    { id: 'analytics', label: 'Visual Charts', icon: BarChart3 },
+    { 
+      id: 'fraud', 
+      label: 'Fraud Queue', 
+      icon: ShieldAlert,
+      badge: flaggedVotes.length > 0 ? flaggedVotes.length : null 
+    },
+    { id: 'audit', label: 'Audit Trail', icon: FileText },
+    { id: 'qr', label: 'QR Studio', icon: QrCode },
+    { id: 'sms', label: 'SM Directory', icon: Users },
+    { id: 'settings', label: 'Settings & Rules', icon: Settings },
+  ];
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      {/* Top Admin Header Bar */}
+      <div className="no-print bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 mb-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-extrabold text-white tracking-tight">
+              Vote Monitoring & Fraud Audit System
+            </h1>
+            <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              REAL-TIME
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Logged in as <span className="text-white font-semibold">{user?.name || 'Administrator'}</span> &bull; {campaign?.name || 'Monthly Recognition Campaign'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => loadData(false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:text-white border border-slate-700 transition-colors"
+            title="Refresh All Data"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs Navigation (Responsive overflow) */}
+      <div className="no-print flex items-center gap-1 sm:gap-2 overflow-x-auto pb-2 mb-6 border-b border-slate-800">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span>{item.label}</span>
+              {item.badge && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950">
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Main Content Area */}
+      {loading && !stats ? (
+        <div className="py-24 text-center">
+          <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-xs text-slate-400">Loading live monitoring dashboard...</p>
+        </div>
+      ) : (
+        <>
+          {activeTab === 'overview' && (
+            <DashboardOverview
+              stats={stats}
+              campaign={campaign}
+              onToggleKillSwitch={handleToggleKillSwitch}
+              onToggleTestMode={handleToggleTestMode}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          )}
+
+          {activeTab === 'leaderboard' && (
+            <LeaderboardView
+              leaderboard={stats?.leaderboard || []}
+              branches={branches}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AnalyticsView stats={stats} />
+          )}
+
+          {activeTab === 'fraud' && (
+            <FraudQueuePage
+              flaggedVotes={flaggedVotes}
+              onVoteReviewed={() => loadData(true)}
+            />
+          )}
+
+          {activeTab === 'audit' && (
+            <AuditLogPage branches={branches} />
+          )}
+
+          {activeTab === 'qr' && (
+            <QRStudioPage
+              sms={sms}
+              campaign={campaign}
+            />
+          )}
+
+          {activeTab === 'sms' && (
+            <SMManagementPage
+              sms={sms}
+              onRefresh={() => loadData(true)}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <SettingsPage
+              campaign={campaign}
+              onRefresh={() => loadData(true)}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}

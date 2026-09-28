@@ -1,0 +1,218 @@
+import React, { useState, useEffect } from 'react';
+import { FileText, Download, Search, Filter, ShieldCheck, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
+import api from '../../services/api';
+import { useToast } from '../../context/ToastContext';
+
+export default function AuditLogPage({ branches = [] }) {
+  const [votes, setVotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [modeFilter, setModeFilter] = useState('');
+
+  const { error, info } = useToast();
+
+  const loadVotes = async () => {
+    try {
+      setLoading(true);
+      const res = await api.getVotes({
+        status: statusFilter || undefined,
+        branch: branchFilter || undefined,
+        mode: modeFilter || undefined
+      });
+      setVotes(res.votes || []);
+    } catch (err) {
+      error(err.message || 'Failed to load audit logs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadVotes();
+  }, [statusFilter, branchFilter, modeFilter]);
+
+  const filtered = votes.filter((v) => {
+    const q = search.toLowerCase();
+    return (
+      v.id.toLowerCase().includes(q) ||
+      (v.sm_name && v.sm_name.toLowerCase().includes(q)) ||
+      (v.ip_address && v.ip_address.toLowerCase().includes(q)) ||
+      (v.voter_fingerprint && v.voter_fingerprint.toLowerCase().includes(q))
+    );
+  });
+
+  const handleExportCSV = () => {
+    const query = new URLSearchParams();
+    if (statusFilter) query.set('status', statusFilter);
+    if (branchFilter) query.set('branch', branchFilter);
+    if (modeFilter) query.set('mode', modeFilter);
+
+    window.open(`/api/export/csv?${query.toString()}`, '_blank');
+    info('Downloading audit logs CSV...');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-400" />
+            <span>Audit Trail & Ballot Registry</span>
+          </h2>
+          <p className="text-xs text-slate-400">
+            Immutable log of all cast ballots with cryptographic device hashes, timestamps, and IP addresses
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/20 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export to CSV</span>
+          </button>
+          <button
+            onClick={loadVotes}
+            className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Filters Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5">
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search by ID, SM, IP..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        {/* Status Filter */}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+        >
+          <option value="">All Statuses</option>
+          <option value="valid">Valid Only</option>
+          <option value="flagged">Flagged Only</option>
+          <option value="rejected">Rejected Only</option>
+        </select>
+
+        {/* Branch Filter */}
+        <select
+          value={branchFilter}
+          onChange={(e) => setBranchFilter(e.target.value)}
+          className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+        >
+          <option value="">All Branches</option>
+          {branches.map((b) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+
+        {/* Mode Filter */}
+        <select
+          value={modeFilter}
+          onChange={(e) => setModeFilter(e.target.value)}
+          className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+        >
+          <option value="">All Modes</option>
+          <option value="general">Mode A: General QR</option>
+          <option value="sm_specific">Mode B: SM Specific QR</option>
+        </select>
+      </div>
+
+      {/* Table */}
+      <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-900/80 text-[11px] uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-700">
+              <tr>
+                <th className="py-3 px-4">Vote ID</th>
+                <th className="py-3 px-4">Nominee SM</th>
+                <th className="py-3 px-4">Timestamp</th>
+                <th className="py-3 px-4">Channel</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Device Fingerprint</th>
+                <th className="py-3 px-4">IP Address</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50 font-mono text-[11px]">
+              {loading ? (
+                <tr>
+                  <td colSpan="7" className="py-8 text-center font-sans text-xs text-slate-400">
+                    Loading audit trail...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="py-8 text-center font-sans text-xs text-slate-400">
+                    No vote records match the specified filters.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((v) => (
+                  <tr key={v.id} className="hover:bg-slate-750/50 transition-colors">
+                    <td className="py-3 px-4 text-blue-400 font-medium">
+                      {v.id.substring(0, 16)}...
+                    </td>
+                    <td className="py-3 px-4 font-sans font-bold text-white">
+                      {v.sm_name}
+                      <span className="block text-[10px] text-slate-400 font-normal">{v.sm_branch}</span>
+                    </td>
+                    <td className="py-3 px-4 font-sans text-slate-400">
+                      {new Date(v.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
+                    <td className="py-3 px-4 font-sans">
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-700 text-slate-300">
+                        {v.mode === 'sm_specific' ? 'Mode B (Direct)' : 'Mode A (General)'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-sans">
+                      {v.status === 'valid' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Valid</span>
+                        </span>
+                      )}
+                      {v.status === 'flagged' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Flagged</span>
+                        </span>
+                      )}
+                      {v.status === 'rejected' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          <XCircle className="w-3 h-3" />
+                          <span>Rejected</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-slate-400 truncate max-w-[120px]" title={v.voter_fingerprint}>
+                      {v.voter_fingerprint}
+                    </td>
+                    <td className="py-3 px-4 text-slate-300">
+                      {v.ip_address}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
