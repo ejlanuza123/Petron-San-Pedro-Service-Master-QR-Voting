@@ -80,7 +80,7 @@
             Voter Privacy & Anti-Fraud Notice
           </button>
           <span>&bull;</span>
-          <span class="text-slate-500">v1.2.2</span>
+          <span class="text-slate-500">v1.3.0</span>
         </div>
       </div>
     </footer>
@@ -111,8 +111,10 @@
   <script>
     // --- Application State ---
     let state = {
-      route: 'home', // 'home' | 'sm-vote' | 'success' | 'admin-login' | 'admin'
+      route: 'home', // 'home' | 'sm-vote' | 'success' | 'admin-login' | 'admin' | 'pair-device'
       currentSMId: null,
+      pairingSMId: null,
+      pairingToken: null,
       sms: [],
       campaign: null,
       campaignStatus: null,
@@ -162,10 +164,13 @@
     function navigate(route, extra = {}) {
       state.route = route;
       if (extra.smId) state.currentSMId = extra.smId;
+      if (extra.pairingSMId) state.pairingSMId = extra.pairingSMId;
+      if (extra.pairingToken) state.pairingToken = extra.pairingToken;
       if (extra.receipt) state.lastVoteReceipt = extra.receipt;
 
       let path = '/';
       if (route === 'sm-vote') path = '/vote/sm/' + state.currentSMId;
+      else if (route === 'pair-device') path = '/pair-device?id=' + (state.pairingSMId || '') + (state.pairingToken ? '&token=' + state.pairingToken : '');
       else if (route === 'admin-login') path = '/admin/login';
       else if (route === 'admin') path = '/admin';
       else if (route === 'success') path = '/success';
@@ -181,8 +186,15 @@
 
     function parseUrl() {
       const path = window.location.pathname;
+      const urlParams = new URLSearchParams(window.location.search);
       const smMatch = path.match(/^\/vote\/sm\/([^/?#]+)/i);
-      if (smMatch) {
+      const pairMatch = path.match(/^\/pair(?:-device)?\/([^/?#]+)/i);
+
+      if (pairMatch || path.startsWith('/pair')) {
+        state.route = 'pair-device';
+        state.pairingSMId = pairMatch ? decodeURIComponent(pairMatch[1]) : (urlParams.get('id') || urlParams.get('sm_id'));
+        state.pairingToken = urlParams.get('token') || urlParams.get('key') || '';
+      } else if (smMatch) {
         state.route = 'sm-vote';
         state.currentSMId = decodeURIComponent(smMatch[1]);
       } else if (path.startsWith('/admin/login')) {
@@ -259,6 +271,8 @@
         renderSMVoting(main);
       } else if (state.route === 'success') {
         renderSuccess(main);
+      } else if (state.route === 'pair-device') {
+        renderPairDevice(main);
       } else if (state.route === 'admin-login') {
         renderAdminLogin(main);
       } else if (state.route === 'admin') {
@@ -464,6 +478,144 @@
           </div>
         </div>
       `;
+    }
+
+    // --- VIEW 3b: Staff Phone Pairing (Anti-Self-Vote Registration) ---
+    async function renderPairDevice(container) {
+      const smId = state.pairingSMId;
+      let sm = state.sms.find(s => s.id === smId);
+
+      // If not yet loaded, fetch directly
+      if (!sm && smId) {
+        try {
+          const res = await apiGet('/api/sms/' + encodeURIComponent(smId));
+          sm = res.sm;
+        } catch (e) {
+          console.error('Fetch SM for pairing error:', e);
+        }
+      }
+
+      if (!sm) {
+        container.innerHTML = `
+          <div class="max-w-md mx-auto p-8 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-4 shadow-2xl mt-8">
+            <div class="text-4xl text-rose-400">⚠️</div>
+            <h2 class="text-xl font-black text-white">Staff Member Not Found</h2>
+            <p class="text-xs text-slate-400">The Service Master ID specified in this pairing link does not exist or has been removed.</p>
+            <button onclick="navigate('home')" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold">Return Home</button>
+          </div>
+        `;
+        return;
+      }
+
+      const currentFP = getVoterFingerprint();
+      const isAlreadyPaired = sm.device_fingerprint && (sm.device_fingerprint === currentFP);
+
+      container.innerHTML = `
+        <div class="max-w-md mx-auto space-y-6 mt-4 pb-12">
+          <!-- Corporate Card Header -->
+          <div class="bg-gradient-to-r from-blue-900 via-blue-800 to-slate-900 p-6 rounded-3xl border border-blue-700/40 text-center shadow-2xl relative overflow-hidden">
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl"></div>
+            <div class="flex items-center justify-center gap-2 mb-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-blue-200">Petron San Pedro • Staff Anti-Cheat Hub</span>
+            </div>
+            <h2 class="text-lg font-black text-white">Service Master Phone Registration</h2>
+            <p class="text-xs text-slate-300 mt-1">Register your personal smartphone to prevent unauthorized or accidental self-votes.</p>
+          </div>
+
+          <!-- Nominee Profile Card -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+            <div class="flex items-center gap-4 pb-4 border-b border-slate-800">
+              <img src="${sm.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}" alt="${sm.name}" class="w-16 h-16 rounded-2xl object-cover border-2 border-emerald-500/40 shadow-md bg-slate-800" />
+              <div>
+                <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-700/40">Verified Staff</span>
+                <h3 class="font-extrabold text-white text-lg">${sm.name}</h3>
+                <p class="text-xs text-slate-400">${sm.station || 'Station Service Master'} &bull; ${sm.shift || 'Day Shift'}</p>
+                <p class="text-[10px] font-mono text-slate-500 mt-0.5">${sm.branch || 'Petron San Pedro'}</p>
+              </div>
+            </div>
+
+            <!-- Registration Status Details -->
+            ${isAlreadyPaired ? `
+              <div class="p-4 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs space-y-2">
+                <div class="flex items-center gap-2 font-bold text-emerald-300">
+                  <span class="text-base">✓</span> This Smartphone is Already Registered!
+                </div>
+                <p class="text-[11px] leading-relaxed text-emerald-200/80">
+                  Your phone's hardware signature is actively bound to <b>${sm.name}</b>. The anti-self-vote shield is active. Any votes submitted from this phone for your profile will be safely quarantined in the fraud queue.
+                </p>
+                <div class="text-[10px] font-mono text-emerald-400/70 pt-2 border-t border-emerald-800/40 truncate">
+                  Device Signature: ${sm.device_fingerprint}
+                </div>
+              </div>
+            ` : `
+              <div class="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 text-xs space-y-2">
+                <div class="flex items-center gap-2 font-bold text-white">
+                  <span class="text-blue-400">📱</span> Detected Smartphone Profile
+                </div>
+                <div class="text-[11px] text-slate-300 space-y-1.5 pt-1">
+                  <div class="flex justify-between">
+                    <span class="text-slate-400">Screen Resolution:</span>
+                    <span class="font-semibold text-white">${screen.width} x ${screen.height}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-slate-400">Device Platform:</span>
+                    <span class="font-semibold text-white">${navigator.platform || 'Mobile Phone'}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-slate-400">Hardware Signature:</span>
+                    <span class="font-mono text-[10px] text-amber-300 truncate max-w-[170px]">${currentFP}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-600/30 text-amber-200 text-[11px] leading-relaxed">
+                <b>Anti-Cheat Integrity Guarantee:</b>
+                Registering this phone binds its hardware signature to your employee profile in Supabase. You can still assist customers by having them scan your badge with <i>their</i> phone, but your personal device is locked from casting self-votes.
+              </div>
+
+              <button onclick="handleRegisterDevice('${sm.id}')" id="register-device-btn" class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-extrabold rounded-2xl text-sm shadow-xl flex items-center justify-center gap-2 transition-all">
+                <span>🛡️</span> Confirm & Register This Smartphone
+              </button>
+            `}
+
+            <div class="pt-2 text-center">
+              <button onclick="navigate('home')" class="text-xs text-slate-400 hover:text-white font-semibold">
+                Go to Public Voting Page
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleRegisterDevice(smId) {
+      const btn = document.getElementById('register-device-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Registering phone in Supabase...';
+      }
+
+      const voter_fingerprint = getVoterFingerprint();
+      const token = state.pairingToken || '';
+
+      try {
+        const res = await apiPost('/api/sms/' + encodeURIComponent(smId) + '/register-device', {
+          device_fingerprint: voter_fingerprint,
+          token: token
+        });
+
+        showToast(res.message || 'Phone registered successfully!', 'success');
+        // Refresh local data
+        await initData();
+        render();
+      } catch (err) {
+        showToast('Registration failed: ' + err.message, 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🛡️</span> Retry Device Registration';
+        }
+      }
     }
 
     // --- VIEW 4: Admin Login ---
@@ -1123,6 +1275,27 @@
                     </div>
                   </div>
                   ${s.bio ? `<p class="text-[11px] text-slate-300 line-clamp-2">${s.bio}</p>` : ''}
+
+                  <!-- Device Anti-Cheat Registration Status -->
+                  <div class="p-2.5 rounded-xl border ${s.device_fingerprint ? 'bg-emerald-950/40 border-emerald-500/30' : 'bg-amber-950/40 border-amber-500/30'} flex items-center justify-between gap-2 text-xs">
+                    <div class="flex items-center gap-1.5 min-w-0 truncate">
+                      <span class="w-2 h-2 rounded-full ${s.device_fingerprint ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}"></span>
+                      <span class="font-bold text-[11px] ${s.device_fingerprint ? 'text-emerald-300' : 'text-amber-300'}">
+                        ${s.device_fingerprint ? 'Phone Registered' : 'Phone Unregistered'}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                      ${s.device_fingerprint ? `
+                        <button onclick="openPairModal('${s.id}')" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 hover:text-white border border-slate-700">Re-pair</button>
+                        <button onclick="unlinkDevice('${s.id}', '${s.name.replace(/'/g, "\\'")}')" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950/50 text-rose-300 hover:bg-rose-900/60 border border-rose-800/40">Unlink</button>
+                      ` : `
+                        <button onclick="openPairModal('${s.id}')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm flex items-center gap-1">
+                          <span>📱</span> Pair Phone
+                        </button>
+                      `}
+                    </div>
+                  </div>
+
                   <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[10px] text-slate-500">
                     <span class="font-mono">${s.id}</span>
                     <button onclick="deleteServiceMaster('${s.id}', '${s.name.replace(/'/g, "\\'")}')" class="text-rose-400 hover:text-rose-300 font-semibold hover:underline">
@@ -1173,6 +1346,44 @@
                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md">Save to Supabase</button>
               </div>
             </form>
+          </div>
+        </div>
+
+        <!-- Pair Staff Device Modal -->
+        <div id="pair-device-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl relative text-xs text-slate-300 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">🛡️</span>
+                <h3 class="font-bold text-white text-sm" id="pair-modal-title">Pair Staff Smartphone</h3>
+              </div>
+              <button onclick="closePairModal()" class="text-slate-400 hover:text-white text-lg font-bold">&times;</button>
+            </div>
+
+            <div class="text-center space-y-3">
+              <div id="pair-modal-sm-info" class="flex items-center justify-center gap-3 p-3 bg-slate-800/60 rounded-2xl border border-slate-700/60"></div>
+
+              <div class="p-4 bg-white rounded-2xl shadow-xl border-4 border-emerald-600/30 inline-block mx-auto">
+                <img id="pair-modal-qr" src="" alt="Pairing QR Code" class="w-48 h-48 object-contain rounded-lg" />
+                <span class="block text-[10px] font-bold text-slate-800 mt-2 uppercase tracking-wider">Scan with Staff Phone</span>
+              </div>
+
+              <p class="text-[11px] text-slate-400 max-w-xs mx-auto">
+                Have the Service Master scan this QR code with their personal phone camera to permanently bind their device and activate anti-self-vote detection.
+              </p>
+
+              <div class="flex items-center gap-2 pt-2">
+                <input type="text" id="pair-modal-link" readonly class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-[11px] font-mono select-all" />
+                <button onclick="copyPairUrl()" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 font-bold text-white rounded-xl whitespace-nowrap text-xs">Copy Link</button>
+              </div>
+
+              <div class="pt-3 border-t border-slate-800 flex justify-between gap-2">
+                <button onclick="registerCurrentDeviceDirectly()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-[11px] flex items-center gap-1.5">
+                  <span>💻</span> Register THIS Device Now
+                </button>
+                <button onclick="closePairModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-xs">Done</button>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -1232,6 +1443,88 @@
         await refreshAllData();
       } catch (err) {
         showToast('Error removing samples: ' + err.message, 'error');
+      }
+    }
+
+    let currentPairingSMId = null;
+    let currentPairingToken = null;
+    let currentPairingUrl = null;
+
+    async function openPairModal(smId) {
+      currentPairingSMId = smId;
+      const sm = state.sms.find(s => s.id === smId);
+      if (!sm) return;
+
+      document.getElementById('pair-modal-title').innerText = `Pair Phone • ${sm.name}`;
+      document.getElementById('pair-modal-sm-info').innerHTML = `
+        <img src="${sm.photo_url}" class="w-10 h-10 rounded-xl object-cover bg-slate-700"/>
+        <div class="text-left min-w-0">
+          <div class="font-bold text-white text-xs truncate">${sm.name}</div>
+          <div class="text-[10px] text-emerald-400">${sm.station} &bull; ${sm.shift}</div>
+        </div>
+      `;
+
+      try {
+        const tokenRes = await apiGet(`/api/sms/${encodeURIComponent(smId)}/pair-token`);
+        currentPairingToken = tokenRes.pairing_token;
+        currentPairingUrl = tokenRes.pairing_url;
+        document.getElementById('pair-modal-qr').src = `/api/qr/pair/${encodeURIComponent(smId)}?token=${encodeURIComponent(currentPairingToken)}&t=${Date.now()}`;
+        document.getElementById('pair-modal-link').value = currentPairingUrl;
+      } catch (err) {
+        currentPairingUrl = `${window.location.origin}/pair-device?id=${encodeURIComponent(smId)}`;
+        document.getElementById('pair-modal-qr').src = `/api/qr/pair/${encodeURIComponent(smId)}?t=${Date.now()}`;
+        document.getElementById('pair-modal-link').value = currentPairingUrl;
+      }
+
+      const modal = document.getElementById('pair-device-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closePairModal() {
+      const modal = document.getElementById('pair-device-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      currentPairingSMId = null;
+      currentPairingToken = null;
+    }
+
+    function copyPairUrl() {
+      const linkInput = document.getElementById('pair-modal-link');
+      if (linkInput) {
+        linkInput.select();
+        navigator.clipboard.writeText(linkInput.value).then(() => {
+          showToast('Pairing link copied to clipboard!', 'success');
+        }).catch(() => {
+          showToast('Press Ctrl+C to copy link', 'info');
+        });
+      }
+    }
+
+    async function unlinkDevice(smId, name) {
+      if (!confirm(`Are you sure you want to unlink the registered smartphone for ${name}? Anti-self-vote hardware binding will be removed.`)) return;
+      try {
+        await apiPost(`/api/sms/${encodeURIComponent(smId)}/unregister-device`, {});
+        showToast(`Unlinked device for ${name}`, 'info');
+        await refreshAllData();
+      } catch (err) {
+        showToast('Unlink error: ' + err.message, 'error');
+      }
+    }
+
+    async function registerCurrentDeviceDirectly() {
+      if (!currentPairingSMId) return;
+      const fp = getVoterFingerprint();
+      try {
+        await apiPost(`/api/sms/${encodeURIComponent(currentPairingSMId)}/register-device`, {
+          device_fingerprint: fp,
+          token: currentPairingToken
+        });
+        showToast('Successfully registered this device to Service Master!', 'success');
+        closePairModal();
+        await refreshAllData();
+      } catch (err) {
+        showToast('Direct pairing failed: ' + err.message, 'error');
       }
     }
 

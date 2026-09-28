@@ -68,3 +68,33 @@ export const authenticateToken = (req, res, next) => {
     return res.status(403).json({ error: 'FORBIDDEN', message: 'Malformed token payload' });
   }
 };
+
+/**
+ * Generate a deterministic time-based pairing token for staff device registration
+ */
+export const generatePairingToken = (smId) => {
+  const dayEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+  return crypto
+    .createHmac('sha256', JWT_SECRET)
+    .update(`pair:${smId}:${dayEpoch}`)
+    .digest('hex')
+    .substring(0, 16);
+};
+
+/**
+ * Validate pairing token against today and yesterday epochs
+ */
+export const verifyPairingToken = (smId, token) => {
+  if (!smId || !token) return false;
+  const dayEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+  for (let offset = 0; offset <= 1; offset++) {
+    const expected = crypto
+      .createHmac('sha256', JWT_SECRET)
+      .update(`pair:${smId}:${dayEpoch - offset}`)
+      .digest('hex')
+      .substring(0, 16);
+    if (token === expected) return true;
+  }
+  return false;
+};
+

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import db, { hashPassword, verifyPassword } from './db/database.js';
 import FraudEngine from './services/fraudEngine.js';
 import QRService from './services/qrService.js';
-import { generateToken } from './middleware/auth.js';
+import { generateToken, generatePairingToken, verifyPairingToken } from './middleware/auth.js';
 import supabase, { isSupabaseConfigured } from './db/supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -262,6 +262,88 @@ const server = http.createServer((req, res) => {
       return res.json({ success: true });
     }
 
+    // 4b. Staff Device Pairing for Anti-Self-Vote Protection
+    if (pathname.startsWith('/api/sms/') && pathname.endsWith('/pair-token') && method === 'GET') {
+      const user = authenticate(req);
+      if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
+      const id = pathname.replace('/api/sms/', '').replace('/pair-token', '');
+      const sm = db.getSMById(id);
+      if (!sm) return res.error('Service Master not found', 404, 'NOT_FOUND');
+      const token = generatePairingToken(id);
+      const host = req.headers.host || `localhost:${PORT}`;
+      const proto = req.headers['x-forwarded-proto'] || 'http';
+      return res.json({
+        sm_id: id,
+        sm_name: sm.name,
+        pairing_token: token,
+        pairing_url: `${proto}://${host}/pair-device?id=${encodeURIComponent(id)}&token=${encodeURIComponent(token)}`
+      });
+    }
+
+    if (pathname.startsWith('/api/sms/') && pathname.endsWith('/register-device') && method === 'POST') {
+      const id = pathname.replace('/api/sms/', '').replace('/register-device', '');
+      const sm = db.getSMById(id);
+      if (!sm) return res.error('Service Master not found', 404, 'NOT_FOUND');
+
+      const user = authenticate(req);
+      const pairingToken = body.token || body.pairing_token || parsedUrl.searchParams.get('token');
+      const isTokenValid = pairingToken && verifyPairingToken(id, pairingToken);
+
+      if (!user && !isTokenValid) {
+        return res.error('Invalid or expired pairing authorization token', 401, 'UNAUTHORIZED');
+      }
+
+      const { device_fingerprint, ip_address } = body;
+      if (!device_fingerprint) {
+        return res.error('Hardware device fingerprint is required', 400, 'MISSING_FINGERPRINT');
+      }
+
+      const clientIp = ip_address || ip;
+      const updated = db.updateSM(id, {
+        device_fingerprint,
+        ip_registered: clientIp
+      });
+
+      db.logAction({
+        admin_id: user ? user.id : 'staff-device-pairing',
+        action: 'REGISTER_SM_DEVICE',
+        target_id: id,
+        details: `Registered hardware device fingerprint (${device_fingerprint.substring(0, 16)}...) for ${sm.name} (IP: ${clientIp})`
+      });
+
+      return res.json({
+        success: true,
+        message: `Phone successfully paired to ${sm.name}! Any self-votes will be automatically quarantined.`,
+        sm: updated
+      });
+    }
+
+    if (pathname.startsWith('/api/sms/') && pathname.endsWith('/unregister-device') && method === 'POST') {
+      const user = authenticate(req);
+      if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
+      const id = pathname.replace('/api/sms/', '').replace('/unregister-device', '');
+      const sm = db.getSMById(id);
+      if (!sm) return res.error('Service Master not found', 404, 'NOT_FOUND');
+
+      const updated = db.updateSM(id, {
+        device_fingerprint: null,
+        ip_registered: null
+      });
+
+      db.logAction({
+        admin_id: user.id,
+        action: 'UNREGISTER_SM_DEVICE',
+        target_id: id,
+        details: `Unlinked hardware device registration for ${sm.name}`
+      });
+
+      return res.json({
+        success: true,
+        message: `Hardware device registration cleared for ${sm.name}.`,
+        sm: updated
+      });
+    }
+
     // 5. Submit Vote
     if (pathname === '/api/vote' && method === 'POST') {
       if (isRateLimited(ip, 12, 60000)) {
@@ -454,6 +536,33 @@ const server = http.createServer((req, res) => {
         'Content-Type': 'image/svg+xml',
         'Cache-Control': 'no-cache',
         'Content-Disposition': `${isDownload ? 'attachment' : 'inline'}; filename="petron-badge-${safeName}-qr.svg"`
+      });
+      return res.end(data.svg);
+    }
+
+    if (pathname.startsWith('/api/qr/pair/') && method === 'GET') {
+      const smId = pathname.replace('/api/qr/pair/', '');
+      const sm = db.getSMById(smId);
+      if (!sm) return res.error('Service Master not found', 404, 'NOT_FOUND');
+
+      const token = parsedUrl.searchParams.get('token') || generatePairingToken(smId);
+      const base = parsedUrl.searchParams.get('baseUrl') || `http://${req.headers.host || 'localhost:5000'}`;
+      const data = await QRService.generateDevicePairingQR(base, smId, token);
+
+      const format = parsedUrl.searchParams.get('format');
+      const accept = req.headers['accept'] || '';
+      const wantsJson = format === 'json' || (accept.includes('application/json') && !accept.includes('image/'));
+
+      if (wantsJson) {
+        return res.json({ ...data, sm, pairing_token: token });
+      }
+
+      const isDownload = parsedUrl.searchParams.get('download') === 'true';
+      const safeName = sm.name ? sm.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : sm.id;
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': 'no-cache',
+        'Content-Disposition': `${isDownload ? 'attachment' : 'inline'}; filename="petron-pair-${safeName}-qr.svg"`
       });
       return res.end(data.svg);
     }
