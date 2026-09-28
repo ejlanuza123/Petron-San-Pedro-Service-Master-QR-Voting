@@ -399,7 +399,20 @@ const server = http.createServer((req, res) => {
     if (pathname === '/api/qr/general' && method === 'GET') {
       const base = parsedUrl.searchParams.get('baseUrl') || `http://${req.headers.host || 'localhost:5000'}`;
       const data = await QRService.generateGeneralVotingQR(base);
-      return res.json(data);
+      const format = parsedUrl.searchParams.get('format');
+      const accept = req.headers['accept'] || '';
+      const wantsJson = format === 'json' || (accept.includes('application/json') && !accept.includes('image/'));
+
+      if (wantsJson) {
+        return res.json(data);
+      }
+
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': 'no-cache',
+        'Content-Disposition': 'inline; filename="general-voting-qr.svg"'
+      });
+      return res.end(data.svg);
     }
 
     if (pathname.startsWith('/api/qr/sm/') && method === 'GET') {
@@ -408,7 +421,20 @@ const server = http.createServer((req, res) => {
       if (!sm) return res.error('SM not found', 404);
       const base = parsedUrl.searchParams.get('baseUrl') || `http://${req.headers.host || 'localhost:5000'}`;
       const data = await QRService.generateSMVotingQR(base, sm.id);
-      return res.json({ ...data, sm });
+      const format = parsedUrl.searchParams.get('format');
+      const accept = req.headers['accept'] || '';
+      const wantsJson = format === 'json' || (accept.includes('application/json') && !accept.includes('image/'));
+
+      if (wantsJson) {
+        return res.json({ ...data, sm });
+      }
+
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': 'no-cache',
+        'Content-Disposition': `inline; filename="sm-${sm.id}-qr.svg"`
+      });
+      return res.end(data.svg);
     }
 
     if (pathname === '/api/qr/all-sms' && method === 'GET') {
@@ -416,7 +442,7 @@ const server = http.createServer((req, res) => {
       const base = parsedUrl.searchParams.get('baseUrl') || `http://${req.headers.host || 'localhost:5000'}`;
       const batch = await Promise.all(sms.map(async s => {
         const qr = await QRService.generateSMVotingQR(base, s.id);
-        return { sm: s, targetUrl: qr.targetUrl, qrDataUrl: qr.qrDataUrl };
+        return { sm: s, targetUrl: qr.targetUrl, qrDataUrl: qr.qrDataUrl, svg: qr.svg };
       }));
       return res.json({ count: batch.length, batch });
     }

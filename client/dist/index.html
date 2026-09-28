@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Service Master of the Month | QR Voting & Recognition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: '#2563eb', 600: '#1d4ed8' },
+            petron: { blue: '#003882', red: '#ED1C24', gold: '#FDB913' }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b1329; color: #f1f5f9; }
+    @media print {
+      body * { visibility: hidden; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white !important; color: black !important; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#0b1329] text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
+  <div id="app" class="flex-1 flex flex-col">
+    <!-- Header -->
+    <header class="no-print bg-slate-900/90 border-b border-slate-800 sticky top-0 z-40 backdrop-blur-md">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div onclick="navigate('home')" class="flex items-center gap-3 cursor-pointer group">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-800 flex items-center justify-center text-amber-300 shadow-lg shadow-blue-900/30 group-hover:scale-105 transition-transform font-bold text-lg">
+            🏆
+          </div>
+          <div>
+            <div class="font-bold text-sm sm:text-base tracking-tight text-white flex items-center gap-2">
+              <span>Service Master</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">MONTHLY</span>
+            </div>
+            <div class="text-[11px] text-slate-400">QR Voting & Recognition</div>
+          </div>
+        </div>
+
+        <!-- Status Badges -->
+        <div id="header-status-badge" class="hidden md:flex items-center gap-2"></div>
+
+        <!-- Navigation Buttons -->
+        <div class="flex items-center gap-2">
+          <button onclick="navigate('home')" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors">
+            Ballot
+          </button>
+          <div id="auth-nav-container"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main id="main-content" class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 w-full"></main>
+
+    <!-- Footer -->
+    <footer class="no-print border-t border-slate-800 bg-slate-950 py-6 text-xs text-slate-400">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-emerald-400 font-bold">🛡️</span>
+          <span>Fraud-Resistant QR Voting Architecture &copy; 2026. All rights reserved.</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <button onclick="openPrivacyModal()" class="hover:text-blue-400 underline-offset-4 hover:underline">
+            Voter Privacy & Anti-Fraud Notice
+          </button>
+          <span>&bull;</span>
+          <span class="text-slate-500">v1.1.0</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Privacy Modal -->
+  <div id="privacy-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-xs text-slate-300 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-white text-sm">Voter Privacy & Audit Notice</h3>
+        <button onclick="closePrivacyModal()" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      <p><b>1. No PII Stored:</b> No phone numbers, real names, or payment details are collected.</p>
+      <p><b>2. Anti-Cheat Fingerprinting:</b> A SHA-256 cryptographic device hash is generated to enforce a strict 1-vote-per-day limit and catch staff self-voting.</p>
+      <p><b>3. Compliance:</b> Adheres strictly to the Data Privacy Act of 2012 & GDPR guidelines.</p>
+      <div class="text-right pt-2 border-t border-slate-800">
+        <button onclick="closePrivacyModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl">Understood</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none max-w-sm w-full"></div>
+
+  <!-- Printable Area for Badges and Posters -->
+  <div id="print-area" class="print-area hidden"></div>
+
+  <script>
+    // --- Application State ---
+    let state = {
+      route: 'home', // 'home' | 'sm-vote' | 'success' | 'admin-login' | 'admin'
+      currentSMId: null,
+      sms: [],
+      campaign: null,
+      campaignStatus: null,
+      adminToken: localStorage.getItem('sm_admin_token') || null,
+      adminUser: null,
+      adminTab: 'overview',
+      stats: null,
+      flaggedVotes: [],
+      auditVotes: [],
+      selectedBranch: 'All',
+      searchQuery: '',
+      lastVoteReceipt: null
+    };
+
+    // --- Device Fingerprint Generator ---
+    function getVoterFingerprint() {
+      let fp = localStorage.getItem('voter_device_fingerprint');
+      if (!fp) {
+        const entropy = [
+          screen.width + 'x' + screen.height,
+          Intl.DateTimeFormat().resolvedOptions().timeZone,
+          navigator.language,
+          navigator.userAgent,
+          Date.now()
+        ].join(':::');
+        fp = 'fp_' + Math.abs(entropy.split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0)).toString(16) + Math.random().toString(36).substring(2,8);
+        localStorage.setItem('voter_device_fingerprint', fp);
+      }
+      return fp;
+    }
+
+    // --- Toast System ---
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'pointer-events-auto p-4 rounded-xl border shadow-xl backdrop-blur-md text-xs font-semibold flex items-center justify-between gap-3 ' +
+        (type === 'success' ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200' :
+         type === 'error' ? 'bg-rose-950/90 border-rose-500/50 text-rose-200' :
+         type === 'warning' ? 'bg-amber-950/90 border-amber-500/50 text-amber-200' :
+         'bg-slate-800 border-slate-700 text-slate-200');
+      toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()" class="opacity-70 hover:opacity-100">&times;</button>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // --- Router & URL sync ---
+    function navigate(route, extra = {}) {
+      state.route = route;
+      if (extra.smId) state.currentSMId = extra.smId;
+      if (extra.receipt) state.lastVoteReceipt = extra.receipt;
+
+      let path = '/';
+      if (route === 'sm-vote') path = '/vote/sm/' + state.currentSMId;
+      else if (route === 'admin-login') path = '/admin/login';
+      else if (route === 'admin') path = '/admin';
+      else if (route === 'success') path = '/success';
+
+      window.history.pushState(null, '', path);
+      render();
+    }
+
+    window.addEventListener('popstate', () => {
+      parseUrl();
+      render();
+    });
+
+    function parseUrl() {
+      const path = window.location.pathname;
+      const smMatch = path.match(/^\/vote\/sm\/([^/?#]+)/i);
+      if (smMatch) {
+        state.route = 'sm-vote';
+        state.currentSMId = decodeURIComponent(smMatch[1]);
+      } else if (path.startsWith('/admin/login')) {
+        state.route = 'admin-login';
+      } else if (path.startsWith('/admin')) {
+        state.route = state.adminToken ? 'admin' : 'admin-login';
+      } else if (path === '/success') {
+        state.route = 'success';
+      } else {
+        state.route = 'home';
+      }
+    }
+
+    // --- API Service Calls ---
+    async function apiGet(endpoint) {
+      const headers = state.adminToken ? { 'Authorization': 'Bearer ' + state.adminToken } : {};
+      const res = await fetch(endpoint, { headers });
+      return await res.json();
+    }
+
+    async function apiPost(endpoint, data) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (state.adminToken) headers['Authorization'] = 'Bearer ' + state.adminToken;
+      const res = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(data) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Request failed');
+      return json;
+    }
+
+    // --- Data Loaders ---
+    async function initData() {
+      try {
+        const [smsRes, campRes] = await Promise.all([
+          apiGet('/api/sms'),
+          apiGet('/api/campaign')
+        ]);
+        state.sms = smsRes.sms || [];
+        state.campaign = campRes.campaign;
+        state.campaignStatus = campRes.status;
+      } catch (err) {
+        console.error('Init error:', err);
+      }
+      parseUrl();
+      render();
+    }
+
+    async function loadAdminData() {
+      if (!state.adminToken) return;
+      try {
+        const [statsRes, flaggedRes, campRes, allSMsRes] = await Promise.all([
+          apiGet('/api/votes/stats'),
+          apiGet('/api/votes/flagged'),
+          apiGet('/api/campaign'),
+          apiGet('/api/sms?all=true')
+        ]);
+        state.stats = statsRes;
+        state.flaggedVotes = flaggedRes.flagged || [];
+        state.campaign = campRes.campaign;
+        state.campaignStatus = campRes.status;
+        state.sms = allSMsRes.sms || [];
+      } catch (err) {
+        showToast('Admin data fetch error: ' + err.message, 'error');
+      }
+    }
+
+    // --- RENDER CONTROLLER ---
+    async function render() {
+      renderNav();
+      const main = document.getElementById('main-content');
+
+      if (state.route === 'home') {
+        renderGeneralVoting(main);
+      } else if (state.route === 'sm-vote') {
+        renderSMVoting(main);
+      } else if (state.route === 'success') {
+        renderSuccess(main);
+      } else if (state.route === 'admin-login') {
+        renderAdminLogin(main);
+      } else if (state.route === 'admin') {
+        if (!state.adminToken) {
+          state.route = 'admin-login';
+          renderAdminLogin(main);
+        } else {
+          await loadAdminData();
+          renderAdminDashboard(main);
+        }
+      }
+    }
+
+    function renderNav() {
+      const badge = document.getElementById('header-status-badge');
+      if (state.campaignStatus?.kill_switch_active) {
+        badge.innerHTML = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">Voting Suspended</span>`;
+      } else if (state.campaignStatus?.test_mode) {
+        badge.innerHTML = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Test Simulation Mode</span>`;
+      } else if (state.campaignStatus?.is_voting_open) {
+        badge.innerHTML = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>Voting Live</span>`;
+      } else {
+        badge.innerHTML = '';
+      }
+
+      const authNav = document.getElementById('auth-nav-container');
+      if (state.adminToken) {
+        authNav.innerHTML = `
+          <button onclick="navigate('admin')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">Dashboard</button>
+          <button onclick="logoutAdmin()" class="p-1.5 text-slate-400 hover:text-rose-400 text-xs font-semibold">Sign Out</button>
+        `;
+      } else {
+        authNav.innerHTML = `<button onclick="navigate('admin-login')" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white">Admin</button>`;
+      }
+    }
+
+    // --- VIEW 1: General Voting (Mode A) ---
+    function renderGeneralVoting(container) {
+      const branches = ['All', ...new Set(state.sms.map(s => s.branch))];
+      const filtered = state.sms.filter(s => {
+        const matchesBranch = state.selectedBranch === 'All' || s.branch === state.selectedBranch;
+        const matchesSearch = s.name.toLowerCase().includes(state.searchQuery.toLowerCase()) || s.station.toLowerCase().includes(state.searchQuery.toLowerCase());
+        return matchesBranch && matchesSearch;
+      });
+
+      container.innerHTML = `
+        <div class="text-center max-w-2xl mx-auto mb-8">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold mb-3">
+            <span>🏆</span><span>Customer Choice Recognition &bull; Mode A</span>
+          </div>
+          <h1 class="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">Vote for Service Master of the Month</h1>
+          <p class="mt-2 text-xs sm:text-sm text-slate-400">Select the Service Master who provided excellent service. 1 verified vote per customer per day.</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-col sm:flex-row gap-3 items-center justify-between mb-8">
+          <input type="text" id="sm-search-input" value="${state.searchQuery}" placeholder="Search Service Master or Station..."
+            oninput="state.searchQuery = this.value; renderGeneralVoting(document.getElementById('main-content'))"
+            class="w-full sm:w-80 bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500" />
+
+          <div class="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+            ${branches.map(b => `
+              <button onclick="state.selectedBranch = '${b}'; renderGeneralVoting(document.getElementById('main-content'))"
+                class="px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-colors ${state.selectedBranch === b ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}">
+                ${b}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          ${filtered.map(sm => `
+            <div class="bg-slate-800/80 border border-slate-750 hover:border-slate-600 rounded-2xl p-5 flex flex-col justify-between shadow-xl transition-all group">
+              <div>
+                <div class="relative mb-4">
+                  <div class="w-full h-48 rounded-xl overflow-hidden bg-slate-900">
+                    <img src="${sm.photo_url}" alt="${sm.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
+                  </div>
+                  <div class="absolute top-2.5 right-2.5 bg-slate-900/85 px-2.5 py-1 rounded-full border border-slate-700 text-[11px] font-semibold text-amber-300">Nominee</div>
+                  <div class="absolute bottom-2.5 left-2.5 bg-blue-950/90 px-2 py-0.5 rounded-md border border-blue-500/30 text-[10px] font-bold text-blue-300 uppercase">${sm.station}</div>
+                </div>
+                <h4 class="text-base font-bold text-white leading-tight">${sm.name}</h4>
+                <div class="text-xs text-slate-400 mt-1">${sm.branch} &bull; ${sm.shift}</div>
+                ${sm.bio ? `<p class="mt-3 text-xs text-slate-400 italic">"${sm.bio}"</p>` : ''}
+              </div>
+              <div class="mt-4 pt-3 border-t border-slate-700/50">
+                <button onclick="submitCustomerVote('${sm.id}', '${sm.name}', '${sm.branch}', 'general')"
+                  class="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md transition-all active:scale-95">
+                  Vote for ${sm.name.split(' ')[0]}
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // --- VIEW 2: Mode B SM Direct Confirmation ---
+    function renderSMVoting(container) {
+      const sm = state.sms.find(s => s.id === state.currentSMId);
+      if (!sm) {
+        container.innerHTML = `
+          <div class="max-w-md mx-auto py-16 text-center">
+            <h3 class="text-lg font-bold text-white mb-2">Service Master Not Found</h3>
+            <p class="text-xs text-slate-400 mb-6">The scanned QR code is invalid or the nominee is no longer active.</p>
+            <button onclick="navigate('home')" class="px-4 py-2 bg-blue-600 rounded-xl text-xs font-semibold text-white">View All Nominees</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="max-w-md mx-auto py-8">
+          <button onclick="navigate('home')" class="text-xs text-slate-400 hover:text-white mb-6 flex items-center gap-1">&larr; View all nominees</button>
+          <div class="bg-slate-800/90 border border-slate-700 rounded-3xl p-6 sm:p-8 shadow-2xl text-center relative overflow-hidden backdrop-blur-md">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 mb-5">
+              <span>🎯</span><span>Direct QR Scan &bull; Mode B</span>
+            </div>
+            <div class="w-28 h-28 mx-auto rounded-full p-1 bg-gradient-to-tr from-amber-400 via-blue-500 to-indigo-600 shadow-xl mb-4">
+              <img src="${sm.photo_url}" class="w-full h-full object-cover rounded-full bg-slate-900"/>
+            </div>
+            <h2 class="text-2xl font-extrabold text-white">${sm.name}</h2>
+            <div class="text-xs font-medium text-blue-400 mt-1">${sm.branch} &bull; ${sm.station}</div>
+            ${sm.bio ? `<p class="mt-4 text-xs text-slate-300 italic bg-slate-900/60 p-3 rounded-xl border border-slate-750">"${sm.bio}"</p>` : ''}
+            <div class="mt-6 pt-5 border-t border-slate-750">
+              <p class="text-sm font-semibold text-white">Confirm your vote for ${sm.name.split(' ')[0]}?</p>
+              <p class="text-[11px] text-slate-400 mt-1">Recorded instantly for this month's recognition.</p>
+            </div>
+            <div class="mt-6 space-y-2.5">
+              <button onclick="submitCustomerVote('${sm.id}', '${sm.name}', '${sm.branch}', 'sm_specific')"
+                class="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 text-white shadow-lg shadow-blue-600/30 transition-all active:scale-95">
+                Confirm Vote Now
+              </button>
+              <button onclick="navigate('home')" class="w-full py-2.5 text-xs text-slate-400 hover:text-white">
+                Not who served you? Pick someone else
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- Action: Submit Vote ---
+    async function submitCustomerVote(sm_id, sm_name, sm_branch, mode) {
+      if (!state.campaignStatus?.is_voting_open) {
+        if (state.campaignStatus?.kill_switch_active) showToast('Voting is temporarily suspended.', 'warning');
+        else if (!state.campaignStatus?.is_within_hours) showToast('Voting is only open during operating hours (06:00 to 22:00).', 'warning');
+        else showToast('Voting is currently closed.', 'warning');
+        return;
+      }
+
+      try {
+        const fp = getVoterFingerprint();
+        const res = await apiPost('/api/vote', {
+          sm_id,
+          voter_fingerprint: fp,
+          mode
+        });
+
+        navigate('success', {
+          receipt: {
+            vote_id: res.vote_id,
+            sm_name,
+            sm_branch,
+            message: res.message
+          }
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // --- VIEW 3: Success Screen ---
+    function renderSuccess(container) {
+      const receipt = state.lastVoteReceipt || { sm_name: 'Service Master', sm_branch: 'Service Station', vote_id: 'CONFIRMED' };
+      try {
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      } catch(e) {}
+
+      container.innerHTML = `
+        <div class="max-w-md mx-auto py-12 text-center">
+          <div class="bg-slate-800/90 border border-slate-700 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-md">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-3xl mb-4 border border-emerald-500/30">
+              ✓
+            </div>
+            <div class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 mb-2">
+              Vote Recorded!
+            </div>
+            <h2 class="text-2xl font-extrabold text-white">Thank You for Voting!</h2>
+            <p class="text-xs text-slate-300 mt-2">Your feedback directly empowers our Service Masters.</p>
+
+            <div class="mt-6 p-4 rounded-2xl bg-slate-900 border border-slate-750 text-left text-xs space-y-2">
+              <div class="flex justify-between"><span class="text-slate-400">Recipient:</span><span class="font-bold text-white">${receipt.sm_name}</span></div>
+              <div class="flex justify-between"><span class="text-slate-400">Branch:</span><span class="text-blue-400">${receipt.sm_branch}</span></div>
+              <div class="flex justify-between"><span class="text-slate-400">Audit ID:</span><span class="font-mono text-slate-300">${receipt.vote_id}</span></div>
+              <div class="flex justify-between pt-1 text-[11px]"><span class="text-slate-400">Security Status:</span><span class="text-emerald-400 font-semibold">Authenticated</span></div>
+            </div>
+
+            <button onclick="navigate('home')" class="mt-6 w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-bold text-white shadow-lg">
+              Return to Main Voting Ballot
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- VIEW 4: Admin Login ---
+    function renderAdminLogin(container) {
+      container.innerHTML = `
+        <div class="min-h-[70vh] flex items-center justify-center py-10">
+          <div class="bg-slate-800/90 border border-slate-700 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl">
+            <div class="text-center mb-6">
+              <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-2xl mb-3 border border-blue-500/30">🛡️</div>
+              <h2 class="text-xl font-bold text-white">Admin Portal</h2>
+              <p class="text-xs text-slate-400 mt-1">Live monitoring, fraud detection & audit trail</p>
+            </div>
+            <form onsubmit="handleAdminLogin(event)" class="space-y-4 text-xs">
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1">Username</label>
+                <input type="text" id="admin-user-input" value="admin" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white" />
+              </div>
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1">Password</label>
+                <input type="password" id="admin-pass-input" value="admin123" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white" />
+              </div>
+              <div class="p-2.5 rounded-xl bg-blue-950/40 border border-blue-800/40 text-[11px] text-blue-300">
+                Default: <b>admin</b> / <b>admin123</b>
+              </div>
+              <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-500 font-bold rounded-xl text-white shadow-md">Sign In to Dashboard</button>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleAdminLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById('admin-user-input').value;
+      const p = document.getElementById('admin-pass-input').value;
+      try {
+        const res = await apiPost('/api/auth/login', { username: u, password: p });
+        state.adminToken = res.token;
+        state.adminUser = res.user;
+        localStorage.setItem('sm_admin_token', res.token);
+        showToast('Welcome, ' + res.user.name, 'success');
+        navigate('admin');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function logoutAdmin() {
+      localStorage.removeItem('sm_admin_token');
+      state.adminToken = null;
+      state.adminUser = null;
+      navigate('home');
+      showToast('Logged out');
+    }
+
+    // --- VIEW 5: Admin Dashboard ---
+    function renderAdminDashboard(container) {
+      const kpis = state.stats?.kpis || {};
+      const leaderboard = state.stats?.leaderboard || [];
+
+      container.innerHTML = `
+        <div class="space-y-6">
+          <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 class="text-xl font-extrabold text-white">Vote Monitoring & Fraud Audit Dashboard</h1>
+              <p class="text-xs text-slate-400 mt-0.5">${state.campaign?.name || 'Active Campaign'} &bull; Real-time sync</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="loadAdminData(); render()" class="px-3 py-1.5 bg-slate-900 border border-slate-700 text-xs font-semibold rounded-xl text-slate-300 hover:text-white">Refresh Data</button>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto text-xs font-semibold">
+            <button onclick="state.adminTab = 'overview'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap ${state.adminTab === 'overview' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">Overview</button>
+            <button onclick="state.adminTab = 'leaderboard'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap ${state.adminTab === 'leaderboard' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">Leaderboard</button>
+            <button onclick="state.adminTab = 'fraud'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap flex items-center gap-1.5 ${state.adminTab === 'fraud' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">
+              <span>Fraud Queue</span>
+              ${state.flaggedVotes.length > 0 ? `<span class="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px]">${state.flaggedVotes.length}</span>` : ''}
+            </button>
+            <button onclick="state.adminTab = 'qr'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap ${state.adminTab === 'qr' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">QR Studio & Print</button>
+            <button onclick="state.adminTab = 'rules'; render()" class="px-3.5 py-2 rounded-xl whitespace-nowrap ${state.adminTab === 'rules' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}">Fraud Rules</button>
+          </div>
+
+          <!-- Tab Content -->
+          ${state.adminTab === 'overview' ? renderDashboardOverviewContent(kpis, leaderboard) : ''}
+          ${state.adminTab === 'leaderboard' ? renderLeaderboardContent(leaderboard) : ''}
+          ${state.adminTab === 'fraud' ? renderFraudQueueContent() : ''}
+          ${state.adminTab === 'qr' ? renderQRStudioContent() : ''}
+          ${state.adminTab === 'rules' ? renderFraudRulesContent() : ''}
+        </div>
+      `;
+    }
+
+    function renderDashboardOverviewContent(kpis, leaderboard) {
+      return `
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-4">
+            <div class="text-xs text-slate-400">Total Ballots</div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-white mt-1">${kpis.total_votes || 0}</div>
+            <div class="text-[10px] text-slate-500 mt-1">${kpis.today_votes || 0} cast today</div>
+          </div>
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-4">
+            <div class="text-xs text-emerald-400">Valid Votes</div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-emerald-400 mt-1">${kpis.valid_votes || 0}</div>
+            <div class="text-[10px] text-slate-500 mt-1">Official tally</div>
+          </div>
+          <div onclick="state.adminTab = 'fraud'; render()" class="bg-slate-800/80 border border-amber-500/40 rounded-2xl p-4 cursor-pointer hover:bg-slate-800 transition-colors">
+            <div class="text-xs text-amber-400 flex items-center justify-between"><span>Flagged for Review</span><span>&rarr;</span></div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-amber-400 mt-1">${kpis.flagged_votes || 0}</div>
+            <div class="text-[10px] text-amber-300/80 mt-1 underline">Review queue</div>
+          </div>
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-4">
+            <div class="text-xs text-rose-400">Rejected Cheats</div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-rose-400 mt-1">${kpis.rejected_votes || 0}</div>
+            <div class="text-[10px] text-slate-500 mt-1">Blocked automatically</div>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-4 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white text-sm">Emergency Kill Switch</div>
+              <div class="text-xs text-slate-400">Instantly shut down customer voting</div>
+            </div>
+            <button onclick="toggleKillSwitch()" class="px-4 py-2 rounded-xl text-xs font-bold ${state.campaign?.kill_switch ? 'bg-rose-600 text-white' : 'bg-slate-700 text-slate-300'}">
+              ${state.campaign?.kill_switch ? 'Kill Switch ACTIVE' : 'Normal'}
+            </button>
+          </div>
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-4 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white text-sm">Test Simulation Mode</div>
+              <div class="text-xs text-slate-400">Simulate votes without polluting stats</div>
+            </div>
+            <button onclick="toggleTestMode()" class="px-4 py-2 rounded-xl text-xs font-bold ${state.campaign?.test_mode ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-300'}">
+              ${state.campaign?.test_mode ? 'Test Mode ON' : 'Production Mode'}
+            </button>
+          </div>
+        </div>
+
+        <!-- Top SM Spotlight -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-5">
+          <div class="font-bold text-sm text-white mb-3">Top Ranked Service Masters</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            ${leaderboard.slice(0, 3).map((s, idx) => `
+              <div class="p-3 bg-slate-900 rounded-xl border border-slate-750 flex items-center gap-3">
+                <img src="${s.photo_url}" class="w-12 h-12 rounded-full object-cover"/>
+                <div>
+                  <div class="font-bold text-white text-sm">#${idx+1} ${s.name}</div>
+                  <div class="text-[11px] text-slate-400">${s.branch}</div>
+                  <div class="text-xs font-extrabold text-blue-400 mt-0.5">${s.valid_votes} votes (${s.percentage}%)</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderLeaderboardContent(leaderboard) {
+      return `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden">
+          <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+            <h3 class="font-bold text-white text-sm">Ranked Results & Vote Share</h3>
+            <a href="/api/export/leaderboard" target="_blank" class="px-3 py-1.5 bg-blue-600 rounded-xl text-xs font-semibold text-white">Export CSV</a>
+          </div>
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900 text-slate-400 font-semibold border-b border-slate-700">
+              <tr>
+                <th class="py-3 px-4 w-12 text-center">Rank</th>
+                <th class="py-3 px-4">Service Master</th>
+                <th class="py-3 px-4">Branch & Station</th>
+                <th class="py-3 px-4 text-center">Valid Votes</th>
+                <th class="py-3 px-4 text-right">Share %</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700/50">
+              ${leaderboard.map(s => `
+                <tr class="hover:bg-slate-750">
+                  <td class="py-3 px-4 text-center font-bold">${s.rank}</td>
+                  <td class="py-3 px-4 font-bold text-white flex items-center gap-2">
+                    <img src="${s.photo_url}" class="w-7 h-7 rounded-full object-cover"/>
+                    <span>${s.name}</span>
+                  </td>
+                  <td class="py-3 px-4">${s.branch} &bull; <span class="text-slate-400">${s.station}</span></td>
+                  <td class="py-3 px-4 text-center font-bold text-emerald-400">${s.valid_votes}</td>
+                  <td class="py-3 px-4 text-right font-bold text-blue-400">${s.percentage}%</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderFraudQueueContent() {
+      if (state.flaggedVotes.length === 0) {
+        return `
+          <div class="p-12 text-center bg-slate-800/50 border border-slate-700 rounded-2xl">
+            <div class="text-3xl text-emerald-400 mb-2">✓</div>
+            <div class="font-bold text-white text-base">Fraud Queue Clean!</div>
+            <p class="text-xs text-slate-400 mt-1">No flagged ballots currently pending manual moderation.</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="space-y-4">
+          ${state.flaggedVotes.map(v => `
+            <div class="bg-slate-800/90 border border-amber-500/30 rounded-2xl p-4">
+              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-slate-700">
+                <div>
+                  <div class="font-bold text-white text-sm">Vote for ${v.sm_name} (${v.sm_branch})</div>
+                  <div class="text-xs text-slate-400">${new Date(v.timestamp).toLocaleString()} &bull; IP: ${v.ip_address}</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="approveVote('${v.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs">Approve Vote</button>
+                  <button onclick="rejectVote('${v.id}')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs">Reject Cheat</button>
+                </div>
+              </div>
+              <div class="mt-3 p-2.5 rounded-xl bg-amber-950/40 border border-amber-600/30 text-xs text-amber-200">
+                <b>Flag Trigger:</b> ${v.flag_reason}
+              </div>
+              <div class="mt-2 text-[10px] font-mono text-slate-400 truncate">Fingerprint: ${v.voter_fingerprint}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderQRStudioContent() {
+      const firstSM = state.sms[0] || {};
+      return `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 space-y-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-700">
+            <div>
+              <h3 class="font-bold text-white text-base flex items-center gap-2">
+                <span>📱</span> QR Code Print & Deployment Studio
+              </h3>
+              <p class="text-xs text-slate-400">High-contrast, scannable QR codes for Petron San Pedro station displays and staff lanyards</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="window.print()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md">
+                <span>🖨️</span> Print Poster / Badges
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Mode A Card -->
+            <div class="p-5 bg-slate-900/90 border border-slate-750 rounded-2xl text-center flex flex-col items-center justify-between space-y-4 shadow-lg">
+              <div class="space-y-1">
+                <span class="inline-block px-2.5 py-0.5 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold uppercase tracking-wider">Mode A</span>
+                <h4 class="font-bold text-white text-sm">Station Entrance & Receipt Poster</h4>
+                <p class="text-xs text-slate-400 max-w-xs">General QR code placed at entrance counter, pump islands, or printed on cash receipts</p>
+              </div>
+
+              <div class="p-3 bg-white rounded-2xl shadow-xl border-4 border-blue-600/30 flex flex-col items-center">
+                <img id="qr-mode-a-img" src="/api/qr/general" alt="General Voting QR Code" class="w-48 h-48 object-contain rounded-lg" />
+                <span class="text-[10px] font-bold text-slate-800 mt-2 uppercase tracking-wider">Scan to Open Ballot</span>
+              </div>
+
+              <div class="w-full flex items-center justify-center gap-2 pt-1">
+                <a href="/api/qr/general" target="_blank" download="petron-san-pedro-mode-a-qr.svg" class="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-xs font-semibold rounded-xl text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors">
+                  <span>⬇️</span> Download SVG
+                </a>
+                <button onclick="window.open('/vote', '_blank')" class="px-4 py-2 bg-blue-950/60 hover:bg-blue-900/60 text-xs font-semibold rounded-xl text-blue-300 border border-blue-800/40 flex items-center gap-1.5 transition-colors">
+                  <span>↗️</span> Test Voting Link
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode B Card -->
+            <div class="p-5 bg-slate-900/90 border border-slate-750 rounded-2xl text-center flex flex-col items-center justify-between space-y-4 shadow-lg">
+              <div class="space-y-1">
+                <span class="inline-block px-2.5 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider">Mode B</span>
+                <h4 class="font-bold text-white text-sm">Service Master ID / Lanyard Badges</h4>
+                <p class="text-xs text-slate-400 max-w-xs">Unique QR code tied directly to an individual Service Master</p>
+              </div>
+
+              <div class="w-full max-w-xs space-y-1.5 text-left">
+                <label class="block text-[11px] font-semibold text-slate-400">Select Service Master:</label>
+                <select id="sm-badge-select" onchange="updateSMBadge(this.value)" class="w-full bg-slate-800 border border-slate-700 text-xs rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                  ${state.sms.map(s => `<option value="${s.id}">${s.name} (${s.branch || 'Petron San Pedro'})</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="p-3 bg-white rounded-2xl shadow-xl border-4 border-emerald-600/30 flex flex-col items-center">
+                <img id="sm-badge-preview" src="/api/qr/sm/${firstSM.id || ''}" alt="SM Badge QR" class="w-48 h-48 object-contain rounded-lg" />
+                <span id="sm-badge-caption" class="text-[10px] font-bold text-slate-800 mt-2 uppercase tracking-wider">${firstSM.name || 'Direct Vote Badge'}</span>
+              </div>
+
+              <div class="w-full flex items-center justify-center gap-2 pt-1">
+                <button onclick="downloadCurrentSMQR()" class="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-xs font-semibold rounded-xl text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors">
+                  <span>⬇️</span> Download Badge
+                </button>
+                <button onclick="testCurrentSMVote()" class="px-4 py-2 bg-emerald-950/60 hover:bg-emerald-900/60 text-xs font-semibold rounded-xl text-emerald-300 border border-emerald-800/40 flex items-center gap-1.5 transition-colors">
+                  <span>↗️</span> Test Direct Vote
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateSMBadge(smId) {
+      const preview = document.getElementById('sm-badge-preview');
+      const caption = document.getElementById('sm-badge-caption');
+      if (preview) preview.src = '/api/qr/sm/' + smId + '?t=' + Date.now();
+      const sm = state.sms.find(s => s.id === smId);
+      if (caption && sm) caption.innerText = sm.name;
+    }
+
+    function downloadCurrentSMQR() {
+      const select = document.getElementById('sm-badge-select');
+      const smId = select ? select.value : (state.sms[0]?.id || '');
+      if (smId) {
+        window.open('/api/qr/sm/' + smId, '_blank');
+      }
+    }
+
+    function testCurrentSMVote() {
+      const select = document.getElementById('sm-badge-select');
+      const smId = select ? select.value : (state.sms[0]?.id || '');
+      if (smId) {
+        window.open('/vote/sm/' + smId, '_blank');
+      }
+    }
+
+    function renderFraudRulesContent() {
+      const camp = state.campaign || {};
+      return `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 max-w-xl space-y-4">
+          <div class="font-bold text-white text-sm">Anti-Cheat Fraud Rule Settings</div>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">Station Operating Hours Boundary</label>
+              <div class="flex gap-2">
+                <input type="time" id="camp-start-hours" value="${camp.operating_hours_start || '06:00'}" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"/>
+                <span class="self-center text-slate-400">to</span>
+                <input type="time" id="camp-end-hours" value="${camp.operating_hours_end || '22:00'}" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"/>
+              </div>
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Rapid-Fire Max Allowed Votes per 10 mins (from same IP)</label>
+              <input type="number" id="camp-rapid-votes" value="${camp.rapid_fire_max_votes || 5}" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"/>
+            </div>
+            <button onclick="saveFraudRules()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 font-bold rounded-xl text-white">Save Fraud Configuration</button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function toggleKillSwitch() {
+      try {
+        const res = await apiPost('/api/campaign/toggle-kill-switch', {});
+        showToast(res.message, 'warning');
+        await loadAdminData();
+        render();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function toggleTestMode() {
+      try {
+        const res = await apiPost('/api/campaign/toggle-test-mode', {});
+        showToast(res.message, 'info');
+        await loadAdminData();
+        render();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function approveVote(id) {
+      try {
+        await apiPost('/api/votes/' + id + '/approve', { notes: 'Approved in dashboard' });
+        showToast('Vote approved!', 'success');
+        await loadAdminData();
+        render();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function rejectVote(id) {
+      try {
+        await apiPost('/api/votes/' + id + '/reject', { notes: 'Confirmed fraud attempt' });
+        showToast('Vote rejected and excluded!', 'success');
+        await loadAdminData();
+        render();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function saveFraudRules() {
+      const start = document.getElementById('camp-start-hours').value;
+      const end = document.getElementById('camp-end-hours').value;
+      const maxVotes = Number(document.getElementById('camp-rapid-votes').value);
+      try {
+        const res = await fetch('/api/campaign', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.adminToken },
+          body: JSON.stringify({ operating_hours_start: start, operating_hours_end: end, rapid_fire_max_votes: maxVotes })
+        });
+        const data = await res.json();
+        showToast('Rules saved successfully', 'success');
+        await loadAdminData();
+        render();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function openPrivacyModal() {
+      document.getElementById('privacy-modal').classList.remove('hidden');
+      document.getElementById('privacy-modal').classList.add('flex');
+    }
+
+    function closePrivacyModal() {
+      document.getElementById('privacy-modal').classList.add('hidden');
+      document.getElementById('privacy-modal').classList.remove('flex');
+    }
+
+    // Startup
+    initData();
+  </script>
+</body>
+</html>

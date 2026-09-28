@@ -3,10 +3,10 @@ node_modules/
 .env.local
 .DS_Store
 dist/
+!client/dist/**
 build/
 *.log
 *.sqlite
 *.sqlite3
 *.db
-client/dist/
 coverage/

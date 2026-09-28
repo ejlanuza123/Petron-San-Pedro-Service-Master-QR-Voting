@@ -26,11 +26,13 @@ describe('Database and Services Verification', () => {
 
   test('QRService generates valid Data URLs for General and SM modes', async () => {
     const generalQR = await QRService.generateGeneralVotingQR('http://localhost:3000');
-    assert.ok(generalQR.qrDataUrl.startsWith('data:image/'));
+    assert.ok(generalQR.qrDataUrl.startsWith('data:image/svg+xml;base64,'));
+    assert.ok(generalQR.svg.includes('<svg') && generalQR.svg.includes('</svg>'));
     assert.equal(generalQR.targetUrl, 'http://localhost:3000/vote');
 
     const smQR = await QRService.generateSMVotingQR('http://localhost:3000', 'sm-001');
-    assert.ok(smQR.qrDataUrl.startsWith('data:image/'));
+    assert.ok(smQR.qrDataUrl.startsWith('data:image/svg+xml;base64,'));
+    assert.ok(smQR.svg.includes('<svg') && smQR.svg.includes('</svg>'));
     assert.equal(smQR.targetUrl, 'http://localhost:3000/vote/sm/sm-001');
   });
 });
