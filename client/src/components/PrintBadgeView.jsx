@@ -89,7 +89,10 @@ export default function PrintBadgeView({
   // LAYOUT 1: QR ONLY / MINIMAL STICKER
   if (layout === 'qr_only') {
     return (
-      <div className={`${t.cardBg} w-[280px] h-[350px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto my-4 print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}>
+      <div
+        data-badge-card="true"
+        className={`${t.cardBg} w-[280px] h-[350px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}
+      >
         {/* Top Header Stripe */}
         <div className={`absolute top-0 left-0 right-0 h-3.5 ${t.topStripe}`} />
 
@@ -142,7 +145,10 @@ export default function PrintBadgeView({
   // LAYOUT 2: NAME ONLY / PHOTO-FREE (Just QR with Names)
   if (layout === 'name_only') {
     return (
-      <div className={`${t.cardBg} w-[340px] h-[480px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto my-4 print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}>
+      <div
+        data-badge-card="true"
+        className={`${t.cardBg} w-[340px] h-[480px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}
+      >
         {/* Top Header Stripe */}
         <div className={`absolute top-0 left-0 right-0 h-4 ${t.topStripe}`} />
 
@@ -211,7 +217,10 @@ export default function PrintBadgeView({
   // LAYOUT 3: HORIZONTAL / COUNTER TENT
   if (layout === 'horizontal') {
     return (
-      <div className={`${t.cardBg} w-[480px] h-[270px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto my-4 print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}>
+      <div
+        data-badge-card="true"
+        className={`${t.cardBg} w-[480px] h-[270px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}
+      >
         {/* Top Header Stripe */}
         <div className={`absolute top-0 left-0 right-0 h-3.5 ${t.topStripe}`} />
 
@@ -227,7 +236,12 @@ export default function PrintBadgeView({
               )}
               {showPhoto && sm.photo_url && (
                 <div className={`w-16 h-16 rounded-full p-0.5 border-2 ${t.photoBorder} shadow-sm overflow-hidden mb-2`}>
-                  <img src={sm.photo_url} alt={sm.name} className="w-full h-full object-cover rounded-full" />
+                  <img
+                    crossOrigin="anonymous"
+                    src={sm.photo_url}
+                    alt={sm.name}
+                    className="w-full h-full object-cover rounded-full"
+                  />
                 </div>
               )}
               <h3 className="font-extrabold text-lg tracking-tight leading-snug">
@@ -281,7 +295,10 @@ export default function PrintBadgeView({
 
   // DEFAULT / LAYOUT 4: STANDARD FULL PORTRAIT BADGE
   return (
-    <div className={`${t.cardBg} w-[340px] h-[480px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto my-4 print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}>
+    <div
+      data-badge-card="true"
+      className={`${t.cardBg} w-[340px] h-[480px] rounded-2xl border-2 shadow-xl p-5 flex flex-col justify-between relative overflow-hidden font-sans mx-auto print:my-0 print:border-none print:shadow-none print:break-inside-avoid`}
+    >
       {/* Top Header Stripe */}
       <div className={`absolute top-0 left-0 right-0 h-4 ${t.topStripe}`} />
 
@@ -305,6 +322,7 @@ export default function PrintBadgeView({
         {effectiveShowPhoto && (
           <div className={`w-24 h-24 rounded-full p-1 border-2 ${t.photoBorder} shadow-md mb-2 overflow-hidden bg-slate-100`}>
             <img
+              crossOrigin="anonymous"
               src={sm.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=500&q=80'}
               alt={sm.name}
               className="w-full h-full object-cover rounded-full"

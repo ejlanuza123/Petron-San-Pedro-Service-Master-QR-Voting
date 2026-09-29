@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   QrCode,
   Printer,
@@ -12,8 +12,10 @@ import {
   Sliders,
   Type,
   Check,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import api from '../../services/api';
 import PrintBadgeView from '../../components/PrintBadgeView';
 import PrintPosterView from '../../components/PrintPosterView';
@@ -27,6 +29,12 @@ export default function QRStudioPage({ sms = [], campaign }) {
   const [allQRs, setAllQRs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [branchLabel, setBranchLabel] = useState('Petron San Pedro Main');
+
+  // Preview DOM refs for full layout PNG capture
+  const badgePreviewRef = useRef(null);
+  const posterPreviewRef = useRef(null);
+  const [downloadingBadge, setDownloadingBadge] = useState(false);
+  const [downloadingPoster, setDownloadingPoster] = useState(false);
 
   // Badge layout & styling customization state
   const [badgeLayout, setBadgeLayout] = useState('full'); // 'full' | 'name_only' | 'qr_only' | 'horizontal'
@@ -226,6 +234,107 @@ export default function QRStudioPage({ sms = [], campaign }) {
     info(`Downloaded ${filename}`);
   };
 
+  // Export full customized badge layout (with photo or no-photo, name, theme colors, etc.) as high-res PNG
+  const downloadCustomizedBadge = async () => {
+    if (!badgePreviewRef.current) {
+      error('Badge preview is not loaded yet');
+      return;
+    }
+
+    try {
+      setDownloadingBadge(true);
+      const cardEl = badgePreviewRef.current.querySelector('[data-badge-card="true"]') || badgePreviewRef.current;
+
+      const dataUrl = await toPng(cardEl, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: badgeTheme === 'dark' ? '#020617' : '#ffffff'
+      });
+
+      const safeName = (selectedSM?.name || 'badge').toLowerCase().replace(/\s+/g, '-');
+      const filename = `custom-badge-${safeName}-${badgeLayout}.png`;
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      info(`Downloaded customized ${badgeLayout.replace('_', ' ')} badge layout!`);
+    } catch (err) {
+      console.warn('Direct badge export encountered an issue, trying filtered export:', err);
+      try {
+        const cardEl = badgePreviewRef.current.querySelector('[data-badge-card="true"]') || badgePreviewRef.current;
+        const dataUrl = await toPng(cardEl, {
+          pixelRatio: 2,
+          filter: (node) => {
+            if (node.tagName === 'IMG' && node.src && !node.src.startsWith('data:') && !node.src.startsWith(window.location.origin)) {
+              return false;
+            }
+            return true;
+          }
+        });
+
+        const safeName = (selectedSM?.name || 'badge').toLowerCase().replace(/\s+/g, '-');
+        const filename = `custom-badge-${safeName}-${badgeLayout}.png`;
+
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        info(`Downloaded customized badge layout!`);
+      } catch (e2) {
+        console.error('Badge image generation error:', e2);
+        error('Could not generate full card image due to image CORS policy. Downloading raw QR code instead.');
+        if (smQR) {
+          downloadAsPNG(smQR.qrDataUrl, `badge-qr-${(selectedSM?.name || 'sm').toLowerCase().replace(/\s+/g, '-')}.png`);
+        }
+      }
+    } finally {
+      setDownloadingBadge(false);
+    }
+  };
+
+  // Export full Mode A voting poster as high-res PNG
+  const downloadCustomizedPoster = async () => {
+    if (!posterPreviewRef.current) {
+      error('Poster preview is not loaded yet');
+      return;
+    }
+
+    try {
+      setDownloadingPoster(true);
+      const cardEl = posterPreviewRef.current.querySelector('[data-poster-card="true"]') || posterPreviewRef.current;
+
+      const dataUrl = await toPng(cardEl, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: '#ffffff'
+      });
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = 'general-voting-poster.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      info('Downloaded full voting poster image (PNG)!');
+    } catch (err) {
+      console.error('Poster export error:', err);
+      error('Could not export full poster. Downloading raw QR code instead.');
+      if (generalQR) {
+        downloadAsPNG(generalQR.qrDataUrl, 'general-voting-qr.png');
+      }
+    } finally {
+      setDownloadingPoster(false);
+    }
+  };
+
   const selectedSM = sms.find((s) => s.id === selectedSMId) || sms[0];
 
   return (
@@ -365,24 +474,34 @@ export default function QRStudioPage({ sms = [], campaign }) {
 
               <div className="pt-3 border-t border-slate-700/60 space-y-2">
                 <button
-                  onClick={() => generalQR && downloadAsPNG(generalQR.qrDataUrl, 'general-voting-qr.png')}
-                  disabled={!generalQR}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-colors"
+                  onClick={downloadCustomizedPoster}
+                  disabled={downloadingPoster || !generalQR}
+                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/30"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Download QR Image (PNG)</span>
+                  {downloadingPoster ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  <span>{downloadingPoster ? 'Exporting Poster PNG...' : 'Download Full Poster (PNG)'}</span>
                 </button>
-                <button
-                  onClick={() => generalQR && downloadAsSVG(generalQR.svg || generalQR.qrDataUrl, 'general-voting-qr.svg')}
-                  disabled={!generalQR}
-                  className="w-full py-2 px-3 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-300 flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download Vector (SVG)</span>
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => generalQR && downloadAsPNG(generalQR.qrDataUrl, 'general-voting-qr.png')}
+                    disabled={!generalQR}
+                    className="w-full py-2 px-2.5 rounded-xl text-[11px] font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Raw QR (PNG)</span>
+                  </button>
+                  <button
+                    onClick={() => generalQR && downloadAsSVG(generalQR.svg || generalQR.qrDataUrl, 'general-voting-qr.svg')}
+                    disabled={!generalQR}
+                    className="w-full py-2 px-2.5 rounded-xl text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-300 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Vector (SVG)</span>
+                  </button>
+                </div>
                 <button
                   onClick={handlePrint}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center gap-2 transition-colors"
+                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white flex items-center justify-center gap-2 transition-colors"
                 >
                   <Printer className="w-4 h-4" />
                   <span>Print Full Poster (Letter/A4)</span>
@@ -391,14 +510,19 @@ export default function QRStudioPage({ sms = [], campaign }) {
             </div>
 
             {/* Poster Preview */}
-            <div className="lg:col-span-2 bg-slate-950 p-6 rounded-2xl border border-slate-800 flex items-center justify-center overflow-x-auto">
+            <div className="lg:col-span-2 bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col items-center justify-center overflow-x-auto min-h-[500px]">
               {generalQR ? (
-                <div className="scale-90 sm:scale-100 origin-center">
-                  <PrintPosterView
-                    qrDataUrl={generalQR.qrDataUrl}
-                    campaignName={campaign?.name}
-                    branchName={branchLabel}
-                  />
+                <div className="scale-90 sm:scale-100 origin-center flex flex-col items-center">
+                  <div ref={posterPreviewRef} className="inline-block p-1">
+                    <PrintPosterView
+                      qrDataUrl={generalQR.qrDataUrl}
+                      campaignName={campaign?.name}
+                      branchName={branchLabel}
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-4 text-center">
+                    This exact poster layout will be exported when clicking &ldquo;Download Full Poster (PNG)&rdquo;
+                  </p>
                 </div>
               ) : (
                 <div className="py-20 text-slate-500 text-xs">Generating high-res QR code...</div>
@@ -634,25 +758,35 @@ export default function QRStudioPage({ sms = [], campaign }) {
               {/* Download and Print Actions */}
               <div className="pt-3 border-t border-slate-700/60 space-y-2">
                 <button
-                  onClick={() => smQR && downloadAsPNG(smQR.qrDataUrl, `badge-qr-${(selectedSM?.name || 'sm').toLowerCase().replace(/\s+/g, '-')}.png`)}
-                  disabled={!smQR}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-colors"
+                  onClick={downloadCustomizedBadge}
+                  disabled={downloadingBadge || !selectedSM}
+                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/30"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Download Badge QR (PNG)</span>
+                  {downloadingBadge ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  <span>{downloadingBadge ? 'Exporting Badge PNG...' : 'Download Customized Badge (PNG)'}</span>
                 </button>
-                <button
-                  onClick={() => smQR && downloadAsSVG(smQR.svg || smQR.qrDataUrl, `badge-qr-${(selectedSM?.name || 'sm').toLowerCase().replace(/\s+/g, '-')}.svg`)}
-                  disabled={!smQR}
-                  className="w-full py-2 px-3 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-300 flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download Vector (SVG)</span>
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => smQR && downloadAsPNG(smQR.qrDataUrl, `badge-qr-${(selectedSM?.name || 'sm').toLowerCase().replace(/\s+/g, '-')}.png`)}
+                    disabled={!smQR}
+                    className="w-full py-2 px-2.5 rounded-xl text-[11px] font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Raw QR (PNG)</span>
+                  </button>
+                  <button
+                    onClick={() => smQR && downloadAsSVG(smQR.svg || smQR.qrDataUrl, `badge-qr-${(selectedSM?.name || 'sm').toLowerCase().replace(/\s+/g, '-')}.svg`)}
+                    disabled={!smQR}
+                    className="w-full py-2 px-2.5 rounded-xl text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-300 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Vector (SVG)</span>
+                  </button>
+                </div>
                 <button
                   onClick={handlePrint}
                   disabled={!smQR || !selectedSM}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-600/30"
+                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-700 hover:bg-slate-600 border border-slate-600 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-colors"
                 >
                   <Printer className="w-4 h-4" />
                   <span>Print Single Badge</span>
@@ -663,19 +797,24 @@ export default function QRStudioPage({ sms = [], campaign }) {
             {/* Badge Preview */}
             <div className="lg:col-span-2 bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col items-center justify-center min-h-[500px]">
               {smQR && selectedSM ? (
-                <div className="scale-95 sm:scale-100 transition-all">
-                  <PrintBadgeView
-                    sm={selectedSM}
-                    qrDataUrl={smQR.qrDataUrl}
-                    layout={badgeLayout}
-                    theme={badgeTheme}
-                    showPhoto={showPhoto}
-                    showStation={showStation}
-                    showBranch={showBranch}
-                    showInstructions={showInstructions}
-                    showNomineeRibbon={showNomineeRibbon}
-                    customSubtitle={customSubtitle}
-                  />
+                <div className="scale-95 sm:scale-100 transition-all flex flex-col items-center">
+                  <div ref={badgePreviewRef} className="inline-block p-1">
+                    <PrintBadgeView
+                      sm={selectedSM}
+                      qrDataUrl={smQR.qrDataUrl}
+                      layout={badgeLayout}
+                      theme={badgeTheme}
+                      showPhoto={showPhoto}
+                      showStation={showStation}
+                      showBranch={showBranch}
+                      showInstructions={showInstructions}
+                      showNomineeRibbon={showNomineeRibbon}
+                      customSubtitle={customSubtitle}
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-4 text-center">
+                    This exact customized layout will be saved when clicking &ldquo;Download Customized Badge (PNG)&rdquo;
+                  </p>
                 </div>
               ) : (
                 <div className="py-20 text-slate-500 text-xs">

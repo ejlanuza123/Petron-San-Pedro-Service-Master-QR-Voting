@@ -19,7 +19,7 @@ export default function Footer({ onOpenPrivacy }) {
             <span>Voter Privacy & Anti-Fraud Notice</span>
           </button>
           <span className="text-slate-600">&bull;</span>
-          <span className="text-slate-500">v1.5.0</span>
+          <span className="text-slate-500">v1.5.1</span>
         </div>
       </div>
     </footer>

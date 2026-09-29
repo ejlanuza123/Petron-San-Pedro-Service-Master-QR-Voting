@@ -6,7 +6,10 @@ import { Award, Smartphone, CheckCircle, ShieldCheck } from 'lucide-react';
  */
 export default function PrintPosterView({ qrDataUrl, campaignName, branchName }) {
   return (
-    <div className="bg-white text-slate-900 w-[550px] min-h-[750px] rounded-3xl border-4 border-blue-900 shadow-2xl p-8 flex flex-col justify-between relative overflow-hidden font-sans mx-auto my-6 print:m-0 print:border-none print:shadow-none">
+    <div
+      data-poster-card="true"
+      className="bg-white text-slate-900 w-[550px] min-h-[750px] rounded-3xl border-4 border-blue-900 shadow-2xl p-8 flex flex-col justify-between relative overflow-hidden font-sans mx-auto print:m-0 print:border-none print:shadow-none"
+    >
       {/* Top Banner */}
       <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-blue-700 via-indigo-600 to-amber-500" />
 
