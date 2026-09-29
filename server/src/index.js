@@ -58,6 +58,17 @@ function escapeCSV(val) {
   return `"${str}"`;
 }
 
+// Helper for Vercel Serverless Function entrypoints
+export function createVercelHandler(defaultPath) {
+  return async function handler(req, res) {
+    if (defaultPath && (!req.url || !req.url.startsWith('/api') || req.url === '/')) {
+      const search = req.url && req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+      req.url = defaultPath + search;
+    }
+    return handleRequest(req, res);
+  };
+}
+
 // HTTP Server Request Handler (Supports both Node.js standalone and Vercel Serverless)
 export async function handleRequest(req, res) {
   // CORS Headers
@@ -252,7 +263,7 @@ export async function handleRequest(req, res) {
       return res.json({ sms });
     }
 
-    if (pathname.startsWith('/api/sms/') && method === 'GET') {
+    if (pathname.startsWith('/api/sms/') && !pathname.includes('/pair-token') && method === 'GET') {
       const id = pathname.replace('/api/sms/', '');
       const sm = db.getSMById(id);
       if (!sm) return res.error('Service Master not found', 404, 'NOT_FOUND');
