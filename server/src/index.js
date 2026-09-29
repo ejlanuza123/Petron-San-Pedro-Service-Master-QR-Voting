@@ -61,10 +61,26 @@ function escapeCSV(val) {
 // Helper for Vercel Serverless Function entrypoints
 export function createVercelHandler(defaultPath) {
   return async function handler(req, res) {
-    if (defaultPath && (!req.url || !req.url.startsWith('/api') || req.url === '/')) {
+    let subpath = '';
+    if (req.query?.subpath) {
+      subpath = Array.isArray(req.query.subpath) ? req.query.subpath.join('/') : req.query.subpath;
+    } else if (req.query?.path) {
+      subpath = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+    }
+
+    const matched = req.headers && (req.headers['x-matched-path'] || req.headers['x-forwarded-uri'] || req.headers['x-invoke-path']);
+
+    if (matched && matched.startsWith(defaultPath)) {
+      req.url = matched;
+    } else if (subpath) {
+      const cleanSub = String(subpath).replace(/^\//, '');
+      const search = req.url && req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+      req.url = `${defaultPath}/${cleanSub}${search}`;
+    } else if (!req.url || !req.url.startsWith(defaultPath)) {
       const search = req.url && req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
       req.url = defaultPath + search;
     }
+
     return handleRequest(req, res);
   };
 }
@@ -105,12 +121,16 @@ export async function handleRequest(req, res) {
   const parsedUrl = new URL(rawUrl, `http://${req.headers.host || 'localhost'}`);
   let pathname = parsedUrl.pathname;
 
-  // Support Vercel serverless query path params or path normalization
-  if (Array.isArray(req.query?.path)) {
-    pathname = '/api/' + req.query.path.join('/');
-  } else if (typeof req.query?.path === 'string') {
-    pathname = '/api/' + req.query.path;
+  // Support Vercel serverless query subpath or path params
+  const subpathParam = req.query?.subpath || req.query?.path || parsedUrl.searchParams.get('subpath') || parsedUrl.searchParams.get('path');
+  if (subpathParam) {
+    const subStr = Array.isArray(subpathParam) ? subpathParam.join('/') : String(subpathParam);
+    const cleanSub = subStr.replace(/^\//, '');
+    if (cleanSub && !pathname.endsWith('/' + cleanSub) && pathname !== '/' + cleanSub) {
+      pathname = pathname.replace(/\/$/, '') + '/' + cleanSub;
+    }
   }
+
   if (!pathname.startsWith('/api') && pathname !== '/' && !pathname.includes('.')) {
     pathname = '/api' + pathname;
   }

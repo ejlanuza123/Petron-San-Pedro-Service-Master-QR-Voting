@@ -3,6 +3,70 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/api/campaign/(.*)",
+      "destination": "/api/campaign?subpath=$1"
+    },
+    {
+      "source": "/api/campaign",
+      "destination": "/api/campaign"
+    },
+    {
+      "source": "/api/sms/(.*)",
+      "destination": "/api/sms?subpath=$1"
+    },
+    {
+      "source": "/api/sms",
+      "destination": "/api/sms"
+    },
+    {
+      "source": "/api/votes/(.*)",
+      "destination": "/api/votes?subpath=$1"
+    },
+    {
+      "source": "/api/votes",
+      "destination": "/api/votes"
+    },
+    {
+      "source": "/api/auth/(.*)",
+      "destination": "/api/auth?subpath=$1"
+    },
+    {
+      "source": "/api/auth",
+      "destination": "/api/auth"
+    },
+    {
+      "source": "/api/qr/(.*)",
+      "destination": "/api/qr?subpath=$1"
+    },
+    {
+      "source": "/api/qr",
+      "destination": "/api/qr"
+    },
+    {
+      "source": "/api/export/(.*)",
+      "destination": "/api/export?subpath=$1"
+    },
+    {
+      "source": "/api/export",
+      "destination": "/api/export"
+    },
+    {
+      "source": "/api/database/(.*)",
+      "destination": "/api/database?subpath=$1"
+    },
+    {
+      "source": "/api/database",
+      "destination": "/api/database"
+    },
+    {
+      "source": "/api/vote",
+      "destination": "/api/vote"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/health"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

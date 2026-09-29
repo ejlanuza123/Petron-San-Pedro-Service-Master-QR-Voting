@@ -105,3 +105,197 @@ describe('Database and Services Verification', () => {
   });
 });
 
+describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
+  function createMockReqRes({ method = 'GET', url = '/', headers = {}, query = {}, body = null }) {
+    const req = {
+      method,
+      url,
+      headers: { host: 'petron-service-master-voting.vercel.app', ...headers },
+      query,
+      body,
+      async *[Symbol.asyncIterator]() {
+        if (body) {
+          yield typeof body === 'string' ? body : JSON.stringify(body);
+        }
+      }
+    };
+
+    let statusCode = 200;
+    let responseHeaders = {};
+    let responseBody = '';
+
+    const res = {
+      writeHead(code, hdrs = {}) {
+        statusCode = code;
+        responseHeaders = { ...responseHeaders, ...hdrs };
+        return res;
+      },
+      setHeader(name, val) {
+        responseHeaders[name.toLowerCase()] = val;
+      },
+      end(chunk) {
+        if (chunk) responseBody += chunk;
+      },
+      get statusCode() { return statusCode; },
+      get headers() { return responseHeaders; },
+      get body() {
+        try {
+          return JSON.parse(responseBody);
+        } catch {
+          return responseBody;
+        }
+      }
+    };
+
+    return { req, res };
+  }
+
+  test('Campaign Handler successfully executes toggle-kill-switch via subpath rewrite', async () => {
+    const { default: campaignHandler } = await import('../../../api/campaign.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const initialCampaign = db.getActiveCampaign();
+    const initialKillSwitch = initialCampaign.kill_switch;
+
+    const { req, res } = createMockReqRes({
+      method: 'POST',
+      url: '/api/campaign?subpath=toggle-kill-switch',
+      query: { subpath: 'toggle-kill-switch' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await campaignHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.kill_switch, !initialKillSwitch);
+
+    // Toggle back to restore
+    const { req: reqRestore, res: resRestore } = createMockReqRes({
+      method: 'POST',
+      url: '/api/campaign?subpath=toggle-kill-switch',
+      query: { subpath: 'toggle-kill-switch' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+    await campaignHandler(reqRestore, resRestore);
+    assert.equal(resRestore.body.kill_switch, initialKillSwitch);
+  });
+
+  test('Campaign Handler successfully executes toggle-test-mode via subpath rewrite', async () => {
+    const { default: campaignHandler } = await import('../../../api/campaign.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const initialCampaign = db.getActiveCampaign();
+    const initialTestMode = initialCampaign.test_mode;
+
+    const { req, res } = createMockReqRes({
+      method: 'POST',
+      url: '/api/campaign?subpath=toggle-test-mode',
+      query: { subpath: 'toggle-test-mode' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await campaignHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.test_mode, !initialTestMode);
+
+    // Toggle back to restore
+    const { req: reqRestore, res: resRestore } = createMockReqRes({
+      method: 'POST',
+      url: '/api/campaign?subpath=toggle-test-mode',
+      query: { subpath: 'toggle-test-mode' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+    await campaignHandler(reqRestore, resRestore);
+    assert.equal(resRestore.body.test_mode, initialTestMode);
+  });
+
+  test('Votes Handler successfully serves stats via subpath rewrite', async () => {
+    const { default: votesHandler } = await import('../../../api/votes.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/votes?subpath=stats',
+      query: { subpath: 'stats' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await votesHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.body.kpis);
+    assert.ok(Array.isArray(res.body.leaderboard));
+  });
+
+  test('Auth Handler successfully logs in via subpath rewrite', async () => {
+    const { default: authHandler } = await import('../../../api/auth.js');
+
+    const { req, res } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=login',
+      query: { subpath: 'login' },
+      body: { username: 'admin', password: 'admin123' }
+    });
+
+    await authHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.body.token);
+    assert.equal(res.body.user.username, 'admin');
+  });
+
+  test('Database Handler successfully returns status via subpath rewrite', async () => {
+    const { default: dbHandler } = await import('../../../api/database.js');
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/database?subpath=status',
+      query: { subpath: 'status' }
+    });
+
+    await dbHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.body.provider);
+    assert.ok(res.body.database_url);
+  });
+
+  test('Health Handler returns online status', async () => {
+    const { default: healthHandler } = await import('../../../api/health.js');
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/health'
+    });
+
+    await healthHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.status, 'online');
+  });
+
+  test('QR Handler returns general voting QR via subpath rewrite', async () => {
+    const { default: qrHandler } = await import('../../../api/qr.js');
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/qr?subpath=general&format=json',
+      query: { subpath: 'general', format: 'json' }
+    });
+
+    await qrHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.body.targetUrl);
+    assert.ok(res.body.qrDataUrl);
+  });
+});
+
+

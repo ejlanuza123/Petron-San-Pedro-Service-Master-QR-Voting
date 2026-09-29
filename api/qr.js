@@ -1,3 +1,3 @@
 import { createVercelHandler } from '../server/src/index.js';
 
-export default createVercelHandler('/api/campaign');
+export default createVercelHandler('/api/qr');
