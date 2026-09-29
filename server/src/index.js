@@ -96,7 +96,13 @@ export async function handleRequest(req, res) {
     };
   }
 
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const matchedPath = req.headers && (req.headers['x-matched-path'] || req.headers['x-forwarded-uri'] || req.headers['x-invoke-path']);
+  let rawUrl = req.url || '/';
+  if ((rawUrl === '/' || rawUrl.startsWith('/api/index') || rawUrl === '/api') && matchedPath && matchedPath.startsWith('/api') && !matchedPath.startsWith('/api/index')) {
+    rawUrl = matchedPath;
+  }
+
+  const parsedUrl = new URL(rawUrl, `http://${req.headers.host || 'localhost'}`);
   let pathname = parsedUrl.pathname;
 
   // Support Vercel serverless query path params or path normalization
