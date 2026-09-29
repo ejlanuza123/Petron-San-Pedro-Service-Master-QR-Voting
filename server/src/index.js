@@ -156,6 +156,11 @@ export async function handleRequest(req, res) {
 
   console.log(`[${new Date().toISOString()}] ${method} ${pathname}`);
 
+  // Ensure state is synchronized with Supabase before executing API logic
+  if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+    await db.ensureDataLoaded();
+  }
+
     // --- API ROUTING ---
 
     // 1. Health
@@ -246,7 +251,7 @@ export async function handleRequest(req, res) {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       const current = db.getActiveCampaign();
-      const updated = db.updateCampaign(current.id, body);
+      const updated = await db.updateCampaign(current.id, body);
       db.logAction({ admin_id: user.id, action: 'UPDATE_CAMPAIGN_RULES', target_id: current.id, details: body });
       return res.json({ campaign: updated, message: 'Settings updated' });
     }
@@ -256,7 +261,7 @@ export async function handleRequest(req, res) {
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       const current = db.getActiveCampaign();
       const newState = !current.kill_switch;
-      db.updateCampaign(current.id, { kill_switch: newState });
+      await db.updateCampaign(current.id, { kill_switch: newState });
       return res.json({
         kill_switch: newState,
         message: newState ? 'Kill switch ENGAGED: Voting halted.' : 'Kill switch deactivated: Voting resumed.'
@@ -268,7 +273,7 @@ export async function handleRequest(req, res) {
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       const current = db.getActiveCampaign();
       const newState = !current.test_mode;
-      db.updateCampaign(current.id, { test_mode: newState });
+      await db.updateCampaign(current.id, { test_mode: newState });
       return res.json({
         test_mode: newState,
         message: newState ? 'Test Mode activated' : 'Test Mode deactivated'
@@ -300,7 +305,7 @@ export async function handleRequest(req, res) {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       if (!body.name || !body.branch) return res.error('Name and Branch required', 400);
-      const newSM = db.createSM(body);
+      const newSM = await db.createSM(body);
       return res.json({ sm: newSM }, 201);
     }
 
@@ -308,7 +313,7 @@ export async function handleRequest(req, res) {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       const id = pathname.replace('/api/sms/', '');
-      const updated = db.updateSM(id, body);
+      const updated = await db.updateSM(id, body);
       if (!updated) return res.error('SM not found', 404);
       return res.json({ sm: updated });
     }
@@ -317,7 +322,7 @@ export async function handleRequest(req, res) {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       const id = pathname.replace('/api/sms/', '');
-      db.deleteSM(id);
+      await db.deleteSM(id);
       return res.json({ success: true });
     }
 
@@ -358,7 +363,7 @@ export async function handleRequest(req, res) {
       }
 
       const clientIp = ip_address || ip;
-      const updated = db.updateSM(id, {
+      const updated = await db.updateSM(id, {
         device_fingerprint,
         ip_registered: clientIp
       });
@@ -384,7 +389,7 @@ export async function handleRequest(req, res) {
       const sm = db.getSMById(id);
       if (!sm) return res.error('Service Master not found', 404, 'NOT_FOUND');
 
-      const updated = db.updateSM(id, {
+      const updated = await db.updateSM(id, {
         device_fingerprint: null,
         ip_registered: null
       });
@@ -428,7 +433,7 @@ export async function handleRequest(req, res) {
       const targetSM = db.getSMById(sm_id);
       const campaign = db.getActiveCampaign();
 
-      const newVote = db.createVote({
+      const newVote = await db.createVote({
         sm_id,
         voter_fingerprint,
         ip_address: ip,
@@ -477,7 +482,7 @@ export async function handleRequest(req, res) {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       const voteId = pathname.split('/')[3];
-      const updated = db.updateVoteStatus(voteId, { status: 'valid', reviewed_by: user.username, review_notes: body.notes });
+      const updated = await db.updateVoteStatus(voteId, { status: 'valid', reviewed_by: user.username, review_notes: body.notes });
       return res.json({ success: true, vote: updated });
     }
 
@@ -485,7 +490,7 @@ export async function handleRequest(req, res) {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
       const voteId = pathname.split('/')[3];
-      const updated = db.updateVoteStatus(voteId, { status: 'rejected', reviewed_by: user.username, review_notes: body.notes });
+      const updated = await db.updateVoteStatus(voteId, { status: 'rejected', reviewed_by: user.username, review_notes: body.notes });
       return res.json({ success: true, vote: updated });
     }
 

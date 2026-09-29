@@ -16,6 +16,15 @@ export default function QRStudioPage({ sms = [], campaign }) {
 
   const { error, info } = useToast();
 
+  // Keep selected SM in sync when SMs load asynchronously
+  useEffect(() => {
+    if (sms.length > 0) {
+      if (!selectedSMId || !sms.some((s) => s.id === selectedSMId)) {
+        setSelectedSMId(sms[0].id);
+      }
+    }
+  }, [sms, selectedSMId]);
+
   const loadGeneralQR = async () => {
     try {
       setLoading(true);
@@ -64,7 +73,7 @@ export default function QRStudioPage({ sms = [], campaign }) {
   }, [selectedSMId]);
 
   useEffect(() => {
-    if (activeTab === 'batch' && allQRs.length === 0) {
+    if (activeTab === 'batch') {
       loadAllSMQRs();
     }
   }, [activeTab]);
@@ -73,7 +82,80 @@ export default function QRStudioPage({ sms = [], campaign }) {
     window.print();
   };
 
-  const handleDownload = (dataUrl, filename) => {
+  // Convert SVG Data URL or SVG string to a crisp 1024x1024 PNG file for download
+  const downloadAsPNG = (svgDataUrl, filename = 'qr-code.png', size = 1024) => {
+    if (!svgDataUrl) {
+      error('QR code not ready yet');
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+
+        const pngUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = pngUrl;
+        a.download = filename.endsWith('.png') ? filename : `${filename}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        info(`Downloaded ${filename}`);
+      } catch (e) {
+        // Fallback to direct download
+        fallbackDownload(svgDataUrl, filename);
+      }
+    };
+    img.onerror = () => {
+      fallbackDownload(svgDataUrl, filename);
+    };
+    img.src = svgDataUrl;
+  };
+
+  // Download raw SVG vector file
+  const downloadAsSVG = (svgContentOrDataUrl, filename = 'qr-code.svg') => {
+    if (!svgContentOrDataUrl) {
+      error('QR code not ready yet');
+      return;
+    }
+    let url = svgContentOrDataUrl;
+    let revoke = false;
+    try {
+      if (svgContentOrDataUrl.startsWith('data:image/svg+xml;base64,')) {
+        const base64 = svgContentOrDataUrl.replace('data:image/svg+xml;base64,', '');
+        const svgText = atob(base64);
+        const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+        url = URL.createObjectURL(blob);
+        revoke = true;
+      } else if (svgContentOrDataUrl.startsWith('<svg')) {
+        const blob = new Blob([svgContentOrDataUrl], { type: 'image/svg+xml;charset=utf-8' });
+        url = URL.createObjectURL(blob);
+        revoke = true;
+      }
+    } catch (e) {
+      url = svgContentOrDataUrl;
+    }
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.endsWith('.svg') ? filename : `${filename}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if (revoke) {
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+    info(`Downloaded ${filename}`);
+  };
+
+  const fallbackDownload = (dataUrl, filename) => {
     const a = document.createElement('a');
     a.href = dataUrl;
     a.download = filename;
@@ -206,11 +288,20 @@ export default function QRStudioPage({ sms = [], campaign }) {
 
               <div className="pt-3 border-t border-slate-700/60 space-y-2">
                 <button
-                  onClick={() => generalQR && handleDownload(generalQR.qrDataUrl, 'general-voting-qr.png')}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center gap-2 transition-colors"
+                  onClick={() => generalQR && downloadAsPNG(generalQR.qrDataUrl, 'general-voting-qr.png')}
+                  disabled={!generalQR}
+                  className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-colors"
                 >
                   <Download className="w-4 h-4" />
                   <span>Download QR Image (PNG)</span>
+                </button>
+                <button
+                  onClick={() => generalQR && downloadAsSVG(generalQR.svg || generalQR.qrDataUrl, 'general-voting-qr.svg')}
+                  disabled={!generalQR}
+                  className="w-full py-2 px-3 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-300 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Vector (SVG)</span>
                 </button>
                 <button
                   onClick={handlePrint}
@@ -250,34 +341,49 @@ export default function QRStudioPage({ sms = [], campaign }) {
                 <select
                   value={selectedSMId}
                   onChange={(e) => setSelectedSMId(e.target.value)}
+                  disabled={sms.length === 0}
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                 >
-                  {sms.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.branch} - {s.station})
-                    </option>
-                  ))}
+                  {sms.length === 0 ? (
+                    <option value="">No Service Masters Available</option>
+                  ) : (
+                    sms.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.branch} - {s.station})
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">Direct Voting Link</label>
                 <div className="font-mono text-[11px] p-2 bg-slate-900 rounded-xl text-indigo-400 break-all border border-slate-700">
-                  {smQR?.targetUrl || `${window.location.origin}/vote/sm/${selectedSMId}`}
+                  {smQR?.targetUrl || (selectedSMId ? `${window.location.origin}/vote/sm/${selectedSMId}` : 'Select a Service Master')}
                 </div>
               </div>
 
               <div className="pt-3 border-t border-slate-700/60 space-y-2">
                 <button
-                  onClick={() => smQR && handleDownload(smQR.qrDataUrl, `badge-qr-${selectedSM?.name.toLowerCase().replace(/\s+/g, '-')}.png`)}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center gap-2 transition-colors"
+                  onClick={() => smQR && downloadAsPNG(smQR.qrDataUrl, `badge-qr-${(selectedSM?.name || 'sm').toLowerCase().replace(/\s+/g, '-')}.png`)}
+                  disabled={!smQR}
+                  className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-colors"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Download Badge QR Image</span>
+                  <span>Download Badge QR (PNG)</span>
+                </button>
+                <button
+                  onClick={() => smQR && downloadAsSVG(smQR.svg || smQR.qrDataUrl, `badge-qr-${(selectedSM?.name || 'sm').toLowerCase().replace(/\s+/g, '-')}.svg`)}
+                  disabled={!smQR}
+                  className="w-full py-2 px-3 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-300 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Vector (SVG)</span>
                 </button>
                 <button
                   onClick={handlePrint}
-                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center gap-2 transition-colors"
+                  disabled={!smQR || !selectedSM}
+                  className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white flex items-center justify-center gap-2 transition-colors"
                 >
                   <Printer className="w-4 h-4" />
                   <span>Print Single Badge</span>
@@ -290,7 +396,9 @@ export default function QRStudioPage({ sms = [], campaign }) {
               {smQR && selectedSM ? (
                 <PrintBadgeView sm={selectedSM} qrDataUrl={smQR.qrDataUrl} />
               ) : (
-                <div className="py-20 text-slate-500 text-xs">Generating SM badge...</div>
+                <div className="py-20 text-slate-500 text-xs">
+                  {sms.length === 0 ? 'No Service Masters registered yet.' : 'Generating SM badge...'}
+                </div>
               )}
             </div>
           </div>
@@ -315,13 +423,19 @@ export default function QRStudioPage({ sms = [], campaign }) {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-950 p-6 rounded-2xl border border-slate-800">
-              {allQRs.map((item) => (
-                <div key={item.sm.id} className="scale-95 origin-top">
-                  <PrintBadgeView sm={item.sm} qrDataUrl={item.qrDataUrl} />
-                </div>
-              ))}
-            </div>
+            {allQRs.length === 0 ? (
+              <div className="py-20 text-center text-slate-500 text-xs bg-slate-950 p-6 rounded-2xl border border-slate-800">
+                {loading ? 'Generating batch QR codes...' : 'No active Service Masters found to generate badges for.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-950 p-6 rounded-2xl border border-slate-800">
+                {allQRs.map((item) => (
+                  <div key={item.sm.id} className="scale-95 origin-top">
+                    <PrintBadgeView sm={item.sm} qrDataUrl={item.qrDataUrl} />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -40,7 +40,18 @@ loadEnv();
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
+export const isTestEnvironment = () => {
+  return (
+    process.env.NODE_ENV === 'test' ||
+    process.execArgv.includes('--test') ||
+    process.argv.some(arg => typeof arg === 'string' && (arg.includes('.test.js') || arg.endsWith('test')))
+  );
+};
+
 export const isSupabaseConfigured = () => {
+  if (isTestEnvironment() && !process.env.ENABLE_SUPABASE_IN_TESTS) {
+    return false;
+  }
   return !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY) && process.env.SUPABASE_URL.startsWith('https://'));
 };
 

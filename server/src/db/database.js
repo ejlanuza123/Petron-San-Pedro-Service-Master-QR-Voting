@@ -47,6 +47,8 @@ class Database {
       audit_logs: []
     };
     this.supabaseConnected = false;
+    this._lastSyncTime = 0;
+    this._syncPromise = null;
     this.init();
   }
 
@@ -69,15 +71,33 @@ class Database {
       this.seedDefaults();
     }
 
-    // Connect & synchronize live with Supabase in the background
-    this.syncWithSupabase().catch(err => {
-      console.warn('[Database] Initial Supabase sync deferred:', err.message);
+    // Connect & synchronize live with Supabase in the background (except during test runs)
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      this.syncWithSupabase().catch(err => {
+        console.warn('[Database] Initial Supabase sync deferred:', err.message);
+      });
+    }
+  }
+
+  async ensureDataLoaded(force = false) {
+    if (!isSupabaseConfigured() || process.env.NODE_ENV === 'test') return true;
+    const now = Date.now();
+    // Cache for 5 seconds to prevent spamming Supabase on rapid sequential calls, but guarantee freshness
+    if (!force && this._lastSyncTime && (now - this._lastSyncTime < 5000)) {
+      return true;
+    }
+    if (this._syncPromise) {
+      return await this._syncPromise;
+    }
+    this._syncPromise = this.syncWithSupabase().finally(() => {
+      this._syncPromise = null;
     });
+    return await this._syncPromise;
   }
 
   async syncWithSupabase() {
-    if (!isSupabaseConfigured()) {
-      console.log('[Database] Supabase is not configured. Running in local JSON storage mode.');
+    if (!isSupabaseConfigured() || process.env.NODE_ENV === 'test') {
+      console.log('[Database] Running in local JSON storage mode.');
       return false;
     }
 
@@ -112,14 +132,9 @@ class Database {
         console.log(`[Supabase] Loaded ${sbVotes.length} historical votes from Supabase.`);
       }
 
-      this.save();
+      this._lastSyncTime = Date.now();
       this.supabaseConnected = true;
-      console.log('=============================================================');
-      console.log('  [Supabase] LIVE SYNC COMPLETE: APP CONNECTED TO SUPABASE!  ');
-      console.log(`  Database URL: ${process.env.SUPABASE_URL}`);
-      console.log(`  Service Masters: ${this.data.sms.length}`);
-      console.log(`  Votes: ${this.data.votes.length}`);
-      console.log('=============================================================');
+      this.save();
       return true;
     } catch (err) {
       console.error('[Supabase Sync Error]:', err.message);
@@ -143,7 +158,8 @@ class Database {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-    const sampleSMs = [
+    // Never inject dummy sample SMs if Supabase is configured
+    const sampleSMs = isSupabaseConfigured() ? [] : [
       {
         id: 'sm-001',
         name: 'Carlos Mendoza',
@@ -372,7 +388,7 @@ class Database {
     return this.data.sms.find(sm => sm.id === id);
   }
 
-  createSM(smData) {
+  async createSM(smData) {
     const newSM = {
       id: smData.id || `sm-${Date.now().toString(36)}`,
       name: smData.name,
@@ -390,16 +406,18 @@ class Database {
     this.data.sms.push(newSM);
     this.save();
 
-    if (isSupabaseConfigured()) {
-      supabase.insert('sms', newSM).catch(err =>
-        console.error('[Supabase SM Insert Error]:', err.message)
-      );
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      try {
+        await supabase.insert('sms', newSM);
+      } catch (err) {
+        console.error('[Supabase SM Insert Error]:', err.message);
+      }
     }
 
     return newSM;
   }
 
-  updateSM(id, updates) {
+  async updateSM(id, updates) {
     const index = this.data.sms.findIndex(sm => sm.id === id);
     if (index === -1) return null;
     this.data.sms[index] = {
@@ -409,25 +427,29 @@ class Database {
     };
     this.save();
 
-    if (isSupabaseConfigured()) {
-      supabase.update('sms', id, { ...updates, updated_at: new Date().toISOString() }).catch(err =>
-        console.error('[Supabase SM Update Error]:', err.message)
-      );
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      try {
+        await supabase.update('sms', id, { ...updates, updated_at: new Date().toISOString() });
+      } catch (err) {
+        console.error('[Supabase SM Update Error]:', err.message);
+      }
     }
 
     return this.data.sms[index];
   }
 
-  deleteSM(id) {
+  async deleteSM(id) {
     const index = this.data.sms.findIndex(sm => sm.id === id);
     if (index === -1) return false;
     this.data.sms.splice(index, 1);
     this.save();
 
-    if (isSupabaseConfigured()) {
-      supabase.delete('sms', id).catch(err =>
-        console.error('[Supabase SM Delete Error]:', err.message)
-      );
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      try {
+        await supabase.delete('sms', id);
+      } catch (err) {
+        console.error('[Supabase SM Delete Error]:', err.message);
+      }
     }
 
     return true;
@@ -438,7 +460,7 @@ class Database {
     return this.data.campaigns.find(c => c.active) || this.data.campaigns[0];
   }
 
-  updateCampaign(id, updates) {
+  async updateCampaign(id, updates) {
     const index = this.data.campaigns.findIndex(c => c.id === id);
     if (index === -1) return null;
     this.data.campaigns[index] = {
@@ -447,17 +469,19 @@ class Database {
     };
     this.save();
 
-    if (isSupabaseConfigured()) {
-      supabase.update('campaigns', id, updates).catch(err =>
-        console.error('[Supabase Campaign Update Error]:', err.message)
-      );
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      try {
+        await supabase.update('campaigns', id, updates);
+      } catch (err) {
+        console.error('[Supabase Campaign Update Error]:', err.message);
+      }
     }
 
     return this.data.campaigns[index];
   }
 
   // --- Votes Queries ---
-  createVote(voteData) {
+  async createVote(voteData) {
     const vote = {
       id: voteData.id || `vote-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`,
       sm_id: voteData.sm_id,
@@ -477,8 +501,8 @@ class Database {
     this.data.votes.push(vote);
     this.save();
 
-    // Persist directly to Supabase
-    if (isSupabaseConfigured()) {
+    // Persist directly to Supabase and await confirmation
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
       const payload = {
         id: vote.id,
         sm_id: vote.sm_id,
@@ -495,11 +519,12 @@ class Database {
         review_notes: vote.review_notes,
         is_test: vote.is_test
       };
-      supabase.insert('votes', payload).then(res => {
+      try {
+        const res = await supabase.insert('votes', payload);
         if (res) console.log(`[Supabase] Vote ${vote.id} persisted to Supabase successfully.`);
-      }).catch(err => {
+      } catch (err) {
         console.error('[Supabase Vote Save Error]:', err.message);
-      });
+      }
     }
 
     return vote;
@@ -548,7 +573,7 @@ class Database {
     return this.data.votes.find(v => v.id === id);
   }
 
-  updateVoteStatus(id, { status, reviewed_by, review_notes }) {
+  async updateVoteStatus(id, { status, reviewed_by, review_notes }) {
     const vote = this.data.votes.find(v => v.id === id);
     if (!vote) return null;
     vote.status = status;
@@ -557,13 +582,17 @@ class Database {
     if (review_notes !== undefined) vote.review_notes = review_notes;
     this.save();
 
-    if (isSupabaseConfigured()) {
-      supabase.update('votes', id, {
-        status: vote.status,
-        reviewed_by: vote.reviewed_by,
-        reviewed_at: vote.reviewed_at,
-        review_notes: vote.review_notes
-      }).catch(err => console.error('[Supabase Vote Status Update Error]:', err.message));
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      try {
+        await supabase.update('votes', id, {
+          status: vote.status,
+          reviewed_by: vote.reviewed_by,
+          reviewed_at: vote.reviewed_at,
+          review_notes: vote.review_notes
+        });
+      } catch (err) {
+        console.error('[Supabase Vote Status Update Error]:', err.message);
+      }
     }
 
     return vote;
