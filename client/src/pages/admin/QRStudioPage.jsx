@@ -83,40 +83,77 @@ export default function QRStudioPage({ sms = [], campaign }) {
   };
 
   // Convert SVG Data URL or SVG string to a crisp 1024x1024 PNG file for download
-  const downloadAsPNG = (svgDataUrl, filename = 'qr-code.png', size = 1024) => {
-    if (!svgDataUrl) {
+  const downloadAsPNG = (svgContentOrDataUrl, filename = 'qr-code.png', size = 1024) => {
+    if (!svgContentOrDataUrl) {
       error('QR code not ready yet');
       return;
     }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, size, size);
-        ctx.drawImage(img, 0, 0, size, size);
 
-        const pngUrl = canvas.toDataURL('image/png');
-        const a = document.createElement('a');
-        a.href = pngUrl;
-        a.download = filename.endsWith('.png') ? filename : `${filename}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        info(`Downloaded ${filename}`);
-      } catch (e) {
-        // Fallback to direct download
-        fallbackDownload(svgDataUrl, filename);
+    try {
+      let svgText = '';
+      if (svgContentOrDataUrl.startsWith('data:image/svg+xml;base64,')) {
+        svgText = atob(svgContentOrDataUrl.replace('data:image/svg+xml;base64,', ''));
+      } else if (svgContentOrDataUrl.startsWith('<svg')) {
+        svgText = svgContentOrDataUrl;
+      } else {
+        svgText = decodeURIComponent(svgContentOrDataUrl.replace(/^data:image\/svg\+xml;?utf8,/, ''));
       }
-    };
-    img.onerror = () => {
-      fallbackDownload(svgDataUrl, filename);
-    };
-    img.src = svgDataUrl;
+
+      // Ensure explicit width and height on SVG
+      if (!svgText.includes('width=') || !svgText.includes('height=')) {
+        svgText = svgText.replace('<svg', `<svg width="${size}" height="${size}"`);
+      }
+
+      const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+      const blobUrl = URL.createObjectURL(svgBlob);
+      const img = new Image();
+
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, size, size);
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(img, 0, 0, size, size);
+
+          URL.revokeObjectURL(blobUrl);
+
+          canvas.toBlob((pngBlob) => {
+            if (!pngBlob) {
+              fallbackDownload(svgContentOrDataUrl, filename);
+              return;
+            }
+            const pngUrl = URL.createObjectURL(pngBlob);
+            const a = document.createElement('a');
+            a.href = pngUrl;
+            a.download = filename.endsWith('.png') ? filename : `${filename}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(pngUrl), 2000);
+            info(`Downloaded ${filename} as PNG image`);
+          }, 'image/png');
+        } catch (e) {
+          console.error('Canvas export error:', e);
+          URL.revokeObjectURL(blobUrl);
+          fallbackDownload(svgContentOrDataUrl, filename);
+        }
+      };
+
+      img.onerror = (e) => {
+        console.error('Image load error:', e);
+        URL.revokeObjectURL(blobUrl);
+        fallbackDownload(svgContentOrDataUrl, filename);
+      };
+
+      img.src = blobUrl;
+    } catch (err) {
+      console.error('PNG conversion error:', err);
+      fallbackDownload(svgContentOrDataUrl, filename);
+    }
   };
 
   // Download raw SVG vector file

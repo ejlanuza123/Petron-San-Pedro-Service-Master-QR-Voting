@@ -132,6 +132,13 @@ class Database {
         console.log(`[Supabase] Loaded ${sbVotes.length} historical votes from Supabase.`);
       }
 
+      // 5. Sync Audit Logs
+      const sbAuditLogs = await supabase.select('audit_logs', 'order=timestamp.desc&limit=100');
+      if (Array.isArray(sbAuditLogs)) {
+        this.data.audit_logs = sbAuditLogs;
+        console.log(`[Supabase] Loaded ${sbAuditLogs.length} audit logs from Supabase.`);
+      }
+
       this._lastSyncTime = Date.now();
       this.supabaseConnected = true;
       this.save();
@@ -356,7 +363,7 @@ class Database {
       campaigns: [campaign],
       votes: sampleVotes,
       admins: [admin],
-      audit_logs: [
+      audit_logs: isSupabaseConfigured() ? [] : [
         {
           id: 'log-001',
           admin_id: 'system',
@@ -651,7 +658,7 @@ class Database {
   }
 
   // --- Audit Logs ---
-  logAction({ admin_id, action, target_id, details }) {
+  async logAction({ admin_id, action, target_id, details }) {
     const log = {
       id: `log-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 4)}`,
       admin_id: admin_id || 'system',
@@ -660,13 +667,18 @@ class Database {
       details: typeof details === 'object' ? JSON.stringify(details) : String(details),
       timestamp: new Date().toISOString()
     };
-    this.data.audit_logs.push(log);
+    this.data.audit_logs.unshift(log);
+    if (this.data.audit_logs.length > 500) {
+      this.data.audit_logs.length = 500;
+    }
     this.save();
 
-    if (isSupabaseConfigured()) {
-      supabase.insert('audit_logs', log).catch(err =>
-        console.error('[Supabase Audit Log Error]:', err.message)
-      );
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      try {
+        await supabase.insert('audit_logs', log);
+      } catch (err) {
+        console.error('[Supabase Audit Log Error]:', err.message);
+      }
     }
 
     return log;

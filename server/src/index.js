@@ -445,6 +445,22 @@ export async function handleRequest(req, res) {
         is_test: campaign.test_mode
       });
 
+      await db.logAction({
+        admin_id: 'voter',
+        action: newVote.status === 'flagged' ? 'VOTE_FLAGGED' : 'VOTE_CAST',
+        target_id: newVote.id,
+        details: {
+          sm_id: targetSM.id,
+          sm_name: targetSM.name,
+          branch: targetSM.branch,
+          mode: newVote.mode,
+          status: newVote.status,
+          flag_reason: newVote.flag_reason || null,
+          ip: ip,
+          fingerprint: voter_fingerprint
+        }
+      });
+
       return res.json({
         success: true,
         vote_id: newVote.id,
@@ -559,19 +575,26 @@ export async function handleRequest(req, res) {
       });
     }
 
+    if ((pathname === '/api/votes/audit-logs' || pathname === '/api/audit-logs') && method === 'GET') {
+      const user = authenticate(req);
+      if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
+      const logs = db.getAuditLogs(100);
+      return res.json({ logs, count: logs.length });
+    }
+
     // 7. QR Generation
     if (pathname === '/api/qr/general' && method === 'GET') {
       const base = parsedUrl.searchParams.get('baseUrl') || `http://${req.headers.host || 'localhost:5000'}`;
       const data = await QRService.generateGeneralVotingQR(base);
       const format = parsedUrl.searchParams.get('format');
       const accept = req.headers['accept'] || '';
-      const wantsJson = format === 'json' || (accept.includes('application/json') && !accept.includes('image/'));
+      const isDownload = parsedUrl.searchParams.get('download') === 'true';
+      const wantsSvg = format === 'svg' || (accept.includes('image/svg+xml') && !accept.includes('application/json'));
 
-      if (wantsJson) {
+      if (!wantsSvg && !isDownload) {
         return res.json(data);
       }
 
-      const isDownload = parsedUrl.searchParams.get('download') === 'true';
       res.writeHead(200, {
         'Content-Type': 'image/svg+xml',
         'Cache-Control': 'no-cache',
@@ -588,13 +611,13 @@ export async function handleRequest(req, res) {
       const data = await QRService.generateSMVotingQR(base, sm.id);
       const format = parsedUrl.searchParams.get('format');
       const accept = req.headers['accept'] || '';
-      const wantsJson = format === 'json' || (accept.includes('application/json') && !accept.includes('image/'));
+      const isDownload = parsedUrl.searchParams.get('download') === 'true';
+      const wantsSvg = format === 'svg' || (accept.includes('image/svg+xml') && !accept.includes('application/json'));
 
-      if (wantsJson) {
+      if (!wantsSvg && !isDownload) {
         return res.json({ ...data, sm });
       }
 
-      const isDownload = parsedUrl.searchParams.get('download') === 'true';
       const safeName = sm.name ? sm.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : sm.id;
       res.writeHead(200, {
         'Content-Type': 'image/svg+xml',
@@ -615,13 +638,13 @@ export async function handleRequest(req, res) {
 
       const format = parsedUrl.searchParams.get('format');
       const accept = req.headers['accept'] || '';
-      const wantsJson = format === 'json' || (accept.includes('application/json') && !accept.includes('image/'));
+      const isDownload = parsedUrl.searchParams.get('download') === 'true';
+      const wantsSvg = format === 'svg' || (accept.includes('image/svg+xml') && !accept.includes('application/json'));
 
-      if (wantsJson) {
+      if (!wantsSvg && !isDownload) {
         return res.json({ ...data, sm, pairing_token: token });
       }
 
-      const isDownload = parsedUrl.searchParams.get('download') === 'true';
       const safeName = sm.name ? sm.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : sm.id;
       res.writeHead(200, {
         'Content-Type': 'image/svg+xml',

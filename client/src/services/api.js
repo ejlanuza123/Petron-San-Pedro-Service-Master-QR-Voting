@@ -65,20 +65,36 @@ export const api = {
 
   // QR endpoints
   getGeneralQR: async (baseUrl) => {
-    const query = baseUrl ? `?baseUrl=${encodeURIComponent(baseUrl)}` : '';
-    const res = await fetch(`/api/qr/general${query}`);
+    const params = new URLSearchParams({ format: 'json' });
+    if (baseUrl) params.set('baseUrl', baseUrl);
+    const res = await fetch(`/api/qr/general?${params.toString()}`, {
+      headers: { Accept: 'application/json' }
+    });
     return handleResponse(res);
   },
 
   getSMQR: async (id, baseUrl) => {
-    const query = baseUrl ? `?baseUrl=${encodeURIComponent(baseUrl)}` : '';
-    const res = await fetch(`/api/qr/sm/${id}${query}`);
+    const params = new URLSearchParams({ format: 'json' });
+    if (baseUrl) params.set('baseUrl', baseUrl);
+    const res = await fetch(`/api/qr/sm/${id}?${params.toString()}`, {
+      headers: { Accept: 'application/json' }
+    });
     return handleResponse(res);
   },
 
   getAllSMQRs: async (baseUrl) => {
-    const query = baseUrl ? `?baseUrl=${encodeURIComponent(baseUrl)}` : '';
-    const res = await fetch(`/api/qr/all-sms${query}`);
+    const params = new URLSearchParams({ format: 'json' });
+    if (baseUrl) params.set('baseUrl', baseUrl);
+    const res = await fetch(`/api/qr/all-sms?${params.toString()}`, {
+      headers: { Accept: 'application/json' }
+    });
+    return handleResponse(res);
+  },
+
+  getAuditLogs: async () => {
+    const res = await fetch('/api/votes/audit-logs', {
+      headers: { ...getAuthHeaders() }
+    });
     return handleResponse(res);
   },
 

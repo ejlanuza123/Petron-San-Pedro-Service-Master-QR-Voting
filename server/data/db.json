@@ -12,7 +12,7 @@
       "ip_registered": "192.168.10.55",
       "active": true,
       "created_at": "2026-09-28T05:12:50.459+00:00",
-      "updated_at": "2026-09-29T06:44:03.733Z"
+      "updated_at": "2026-09-29T07:30:04.546Z"
     }
   ],
   "campaigns": [
@@ -155,10 +155,18 @@
       "name": "Petron San Pedro Admin",
       "role": "superadmin",
       "created_at": "2026-09-28T01:56:36.972+00:00",
-      "last_login": "2026-09-29T06:44:04.580Z"
+      "last_login": "2026-09-29T07:30:06.001Z"
     }
   ],
   "audit_logs": [
+    {
+      "id": "log-mumcwgmt-8b8k",
+      "admin_id": "admin-001",
+      "action": "ADMIN_LOGIN",
+      "target_id": "admin-001",
+      "details": "Admin admin logged in successfully",
+      "timestamp": "2026-09-29T07:30:06.005Z"
+    },
     {
       "id": "log-001",
       "admin_id": "system",
