@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Award, Download, Search, MapPin, Clock, Filter } from 'lucide-react';
+import { Award, Download, Search, MapPin, Clock, Filter, Loader2 } from 'lucide-react';
+import api, { triggerFileDownload } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 
 export default function LeaderboardView({ leaderboard = [], branches = [] }) {
   const [search, setSearch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('All');
-  const { info } = useToast();
+  const [exporting, setExporting] = useState(false);
+  const { success, error, info } = useToast();
 
   const filtered = leaderboard.filter((item) => {
     const matchesBranch = selectedBranch === 'All' || item.branch === selectedBranch;
@@ -16,9 +18,19 @@ export default function LeaderboardView({ leaderboard = [], branches = [] }) {
     return matchesBranch && matchesSearch;
   });
 
-  const handleExport = () => {
-    window.open('/api/export/leaderboard', '_blank');
-    info('Downloading leaderboard report...');
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const blob = await api.exportLeaderboardCSV(selectedBranch);
+      const branchSlug = selectedBranch !== 'All' ? `-${selectedBranch.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : '';
+      const dateStr = new Date().toISOString().split('T')[0];
+      triggerFileDownload(blob, `sm-leaderboard${branchSlug}-${dateStr}.csv`);
+      success(`Leaderboard report exported successfully (${selectedBranch})`);
+    } catch (err) {
+      error(err.message || 'Failed to export leaderboard');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -37,10 +49,15 @@ export default function LeaderboardView({ leaderboard = [], branches = [] }) {
 
         <button
           onClick={handleExport}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+          disabled={exporting}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 transition-colors shadow-sm"
         >
-          <Download className="w-4 h-4 text-blue-400" />
-          <span>Export Leaderboard (CSV)</span>
+          {exporting ? (
+            <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4 text-blue-400" />
+          )}
+          <span>{exporting ? 'Exporting...' : 'Export Leaderboard (CSV)'}</span>
         </button>
       </div>
 

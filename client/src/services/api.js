@@ -215,7 +215,61 @@ export const api = {
       headers: { ...getAuthHeaders() }
     });
     return handleResponse(res);
+  },
+
+  // Data Exports (CSV)
+  exportVotesCSV: async (filters = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') query.set(k, v);
+    });
+    const res = await fetch(`/api/export/csv?${query.toString()}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to export votes CSV');
+    }
+    return res.blob();
+  },
+
+  exportLeaderboardCSV: async (branch) => {
+    const query = new URLSearchParams();
+    if (branch && branch !== 'All') query.set('branch', branch);
+    const res = await fetch(`/api/export/leaderboard?${query.toString()}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to export leaderboard CSV');
+    }
+    return res.blob();
+  },
+
+  exportSystemLogsCSV: async (action) => {
+    const query = new URLSearchParams();
+    if (action) query.set('action', action);
+    const res = await fetch(`/api/export/system-logs?${query.toString()}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to export system logs CSV');
+    }
+    return res.blob();
   }
 };
 
+export function triggerFileDownload(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+}
+
 export default api;
+

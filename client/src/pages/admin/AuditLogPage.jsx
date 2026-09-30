@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Search, Filter, ShieldCheck, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
-import api from '../../services/api';
+import { 
+  FileText, Download, Search, Filter, ShieldCheck, 
+  AlertTriangle, XCircle, RefreshCw, Calendar, Loader2, RotateCcw 
+} from 'lucide-react';
+import api, { triggerFileDownload } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 
 export default function AuditLogPage({ branches = [] }) {
@@ -9,12 +12,15 @@ export default function AuditLogPage({ branches = [] }) {
   const [systemLogs, setSystemLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingSystem, setLoadingSystem] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
   const [modeFilter, setModeFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
-  const { error, info } = useToast();
+  const { success, error, info } = useToast();
 
   const loadVotes = async () => {
     try {
@@ -22,7 +28,9 @@ export default function AuditLogPage({ branches = [] }) {
       const res = await api.getVotes({
         status: statusFilter || undefined,
         branch: branchFilter || undefined,
-        mode: modeFilter || undefined
+        mode: modeFilter || undefined,
+        startDate: startDate ? new Date(startDate).toISOString() : undefined,
+        endDate: endDate ? new Date(endDate + 'T23:59:59').toISOString() : undefined
       });
       setVotes(res.votes || []);
     } catch (err) {
@@ -45,8 +53,10 @@ export default function AuditLogPage({ branches = [] }) {
   };
 
   useEffect(() => {
-    loadVotes();
-  }, [statusFilter, branchFilter, modeFilter]);
+    if (logView === 'ballots') {
+      loadVotes();
+    }
+  }, [statusFilter, branchFilter, modeFilter, startDate, endDate]);
 
   useEffect(() => {
     if (logView === 'system') {
@@ -59,6 +69,17 @@ export default function AuditLogPage({ branches = [] }) {
     else loadSystemLogs();
   };
 
+  const hasActiveFilters = Boolean(search || statusFilter || branchFilter || modeFilter || startDate || endDate);
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setStatusFilter('');
+    setBranchFilter('');
+    setModeFilter('');
+    setStartDate('');
+    setEndDate('');
+  };
+
   const filtered = votes.filter((v) => {
     const q = search.toLowerCase();
     return (
@@ -69,14 +90,38 @@ export default function AuditLogPage({ branches = [] }) {
     );
   });
 
-  const handleExportCSV = () => {
-    const query = new URLSearchParams();
-    if (statusFilter) query.set('status', statusFilter);
-    if (branchFilter) query.set('branch', branchFilter);
-    if (modeFilter) query.set('mode', modeFilter);
+  const handleExportCSV = async () => {
+    try {
+      setExporting(true);
+      const blob = await api.exportVotesCSV({
+        status: statusFilter || undefined,
+        branch: branchFilter || undefined,
+        mode: modeFilter || undefined,
+        startDate: startDate ? new Date(startDate).toISOString() : undefined,
+        endDate: endDate ? new Date(endDate + 'T23:59:59').toISOString() : undefined
+      });
+      const dateStr = new Date().toISOString().split('T')[0];
+      triggerFileDownload(blob, `votes-audit-${dateStr}.csv`);
+      success('Audit logs CSV downloaded successfully');
+    } catch (err) {
+      error(err.message || 'Failed to export audit logs');
+    } finally {
+      setExporting(false);
+    }
+  };
 
-    window.open(`/api/export/csv?${query.toString()}`, '_blank');
-    info('Downloading audit logs CSV...');
+  const handleExportSystemLogs = async () => {
+    try {
+      setExporting(true);
+      const blob = await api.exportSystemLogsCSV();
+      const dateStr = new Date().toISOString().split('T')[0];
+      triggerFileDownload(blob, `system-audit-logs-${dateStr}.csv`);
+      success('System security audit trail downloaded successfully');
+    } catch (err) {
+      error(err.message || 'Failed to export system audit logs');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -94,13 +139,23 @@ export default function AuditLogPage({ branches = [] }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {logView === 'ballots' && (
+          {logView === 'ballots' ? (
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/20 transition-colors"
+              disabled={exporting}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-md shadow-blue-600/20 transition-colors"
             >
-              <Download className="w-4 h-4" />
-              <span>Export to CSV</span>
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span>{exporting ? 'Exporting...' : 'Export to CSV'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleExportSystemLogs}
+              disabled={exporting}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-md shadow-blue-600/20 transition-colors"
+            >
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span>{exporting ? 'Exporting...' : 'Export System Audit (CSV)'}</span>
             </button>
           )}
           <button
@@ -108,7 +163,7 @@ export default function AuditLogPage({ branches = [] }) {
             className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition-colors"
             title="Refresh"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${(loading || loadingSystem) ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -142,52 +197,89 @@ export default function AuditLogPage({ branches = [] }) {
       {logView === 'ballots' ? (
         <>
           {/* Filters Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search by ID, SM, IP..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-              />
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by ID, SM, IP..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">All Statuses</option>
+                <option value="valid">Valid Only</option>
+                <option value="flagged">Flagged Only</option>
+                <option value="rejected">Rejected Only</option>
+              </select>
+
+              {/* Branch Filter */}
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">All Branches</option>
+                {branches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+
+              {/* Mode Filter */}
+              <select
+                value={modeFilter}
+                onChange={(e) => setModeFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">All Modes</option>
+                <option value="general">Mode A: General QR</option>
+                <option value="sm_specific">Mode B: SM Specific QR</option>
+              </select>
             </div>
 
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-            >
-              <option value="">All Statuses</option>
-              <option value="valid">Valid Only</option>
-              <option value="flagged">Flagged Only</option>
-              <option value="rejected">Rejected Only</option>
-            </select>
+            {/* Date Range & Reset Row */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-700/50">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Date Range:</span>
+                </span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                  title="From Date"
+                />
+                <span className="text-slate-500 text-xs">to</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                  title="To Date"
+                />
+              </div>
 
-            {/* Branch Filter */}
-            <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-            >
-              <option value="">All Branches</option>
-              {branches.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-
-            {/* Mode Filter */}
-            <select
-              value={modeFilter}
-              onChange={(e) => setModeFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-            >
-              <option value="">All Modes</option>
-              <option value="general">Mode A: General QR</option>
-              <option value="sm_specific">Mode B: SM Specific QR</option>
-            </select>
+              {hasActiveFilters && (
+                <button
+                  onClick={handleResetFilters}
+                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700/80 transition-colors shrink-0"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset Filters</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Ballot Table */}

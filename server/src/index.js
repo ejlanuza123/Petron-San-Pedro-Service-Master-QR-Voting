@@ -29,8 +29,17 @@ function isRateLimited(ip, limit = 20, windowMs = 60000) {
 
 // Token verification helper
 function authenticate(req) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers && req.headers['authorization'];
+  let token = authHeader && authHeader.split(' ')[1];
+  if (!token && req.url) {
+    try {
+      const url = new URL(req.url, `http://${req.headers?.host || 'localhost'}`);
+      token = url.searchParams.get('token');
+    } catch {}
+  }
+  if (!token && req.query?.token) {
+    token = req.query.token;
+  }
   if (!token) return null;
   try {
     const parts = token.split('.');
@@ -668,16 +677,25 @@ export async function handleRequest(req, res) {
     if (pathname === '/api/export/csv' && method === 'GET') {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
-      const votes = db.getVotes();
-      const headers = ['Vote ID', 'SM Name', 'Branch', 'Timestamp', 'Mode', 'Status', 'Flag Reason', 'Fingerprint', 'IP Address', 'User Agent'];
+
+      const status = parsedUrl.searchParams.get('status') || undefined;
+      const branch = parsedUrl.searchParams.get('branch') || undefined;
+      const mode = parsedUrl.searchParams.get('mode') || undefined;
+      const startDate = parsedUrl.searchParams.get('startDate') || undefined;
+      const endDate = parsedUrl.searchParams.get('endDate') || undefined;
+      const excludeTest = parsedUrl.searchParams.get('includeTest') !== 'true';
+
+      const votes = db.getVotes({ status, branch, mode, startDate, endDate, excludeTest });
+      const headers = ['Vote ID', 'SM Name', 'Branch', 'Timestamp', 'Mode', 'Status', 'Flag Reason', 'Reviewer', 'Notes', 'Fingerprint', 'IP Address', 'User Agent'];
       const rows = votes.map(v => [
         escapeCSV(v.id), escapeCSV(v.sm_name), escapeCSV(v.sm_branch), escapeCSV(v.timestamp),
-        escapeCSV(v.mode), escapeCSV(v.status), escapeCSV(v.flag_reason || ''), escapeCSV(v.voter_fingerprint),
-        escapeCSV(v.ip_address), escapeCSV(v.user_agent)
+        escapeCSV(v.mode), escapeCSV(v.status), escapeCSV(v.flag_reason || ''),
+        escapeCSV(v.reviewed_by || ''), escapeCSV(v.review_notes || ''),
+        escapeCSV(v.voter_fingerprint), escapeCSV(v.ip_address), escapeCSV(v.user_agent)
       ].join(','));
       const csv = [headers.join(','), ...rows].join('\r\n');
       res.writeHead(200, {
-        'Content-Type': 'text/csv',
+        'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="votes-audit-${Date.now()}.csv"`
       });
       return res.end(csv);
@@ -686,8 +704,13 @@ export async function handleRequest(req, res) {
     if (pathname === '/api/export/leaderboard' && method === 'GET') {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
-      const votes = db.getVotes({ excludeTest: true });
-      const sms = db.getSMs({ all: true });
+
+      const branch = parsedUrl.searchParams.get('branch');
+      const votes = db.getVotes({ excludeTest: true, branch: (branch && branch !== 'All') ? branch : undefined });
+      let sms = db.getSMs({ all: true });
+      if (branch && branch !== 'All') {
+        sms = sms.filter(s => s.branch && s.branch.toLowerCase() === branch.toLowerCase());
+      }
       const validVotes = votes.filter(v => v.status === 'valid');
 
       const tally = {};
@@ -705,9 +728,33 @@ export async function handleRequest(req, res) {
         return [idx + 1, escapeCSV(row.name), escapeCSV(row.branch), escapeCSV(row.station), row.valid, row.total, `"${share}%"`].join(',');
       });
       const csv = [headers.join(','), ...rows].join('\r\n');
+      const branchSlug = branch && branch !== 'All' ? `-${branch.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : '';
       res.writeHead(200, {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="sm-leaderboard-${Date.now()}.csv"`
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="sm-leaderboard${branchSlug}-${Date.now()}.csv"`
+      });
+      return res.end(csv);
+    }
+
+    if (pathname === '/api/export/system-logs' && method === 'GET') {
+      const user = authenticate(req);
+      if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
+
+      const action = parsedUrl.searchParams.get('action') || undefined;
+      let logs = db.getAuditLogs(500);
+      if (action) {
+        logs = logs.filter(l => l.action === action);
+      }
+
+      const headers = ['Log ID', 'Timestamp', 'Admin / Initiator', 'Action', 'Target ID', 'Details'];
+      const rows = logs.map(l => [
+        escapeCSV(l.id), escapeCSV(l.timestamp), escapeCSV(l.admin_id),
+        escapeCSV(l.action), escapeCSV(l.target_id || ''), escapeCSV(l.details || '')
+      ].join(','));
+      const csv = [headers.join(','), ...rows].join('\r\n');
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="system-audit-logs-${Date.now()}.csv"`
       });
       return res.end(csv);
     }

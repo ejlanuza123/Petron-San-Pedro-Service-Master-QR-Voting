@@ -35,6 +35,7 @@ export default function AdminDashboard({ onLogout }) {
   const [sms, setSms] = useState([]);
   const [flaggedVotes, setFlaggedVotes] = useState([]);
   const [dbStatus, setDbStatus] = useState(null);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(15);
   const [loading, setLoading] = useState(true);
 
   const { user } = useAuth();
@@ -65,12 +66,15 @@ export default function AdminDashboard({ onLogout }) {
 
   useEffect(() => {
     loadData();
-    // Poll every 15s for real-time monitoring
+  }, []);
+
+  useEffect(() => {
+    if (autoRefreshInterval <= 0) return;
     const interval = setInterval(() => {
       loadData(true);
-    }, 15000);
+    }, autoRefreshInterval * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [autoRefreshInterval]);
 
   const handleToggleKillSwitch = async () => {
     try {
@@ -143,6 +147,28 @@ export default function AdminDashboard({ onLogout }) {
               <span className="hidden sm:inline">{dbStatus.connected ? 'Supabase Cloud' : 'Local Fallback'}</span>
             </div>
           )}
+
+          {/* Auto Refresh Cadence Selector */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-xs text-slate-300">
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                autoRefreshInterval > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+              }`}
+            />
+            <span className="text-[11px] text-slate-400 hidden md:inline">Sync:</span>
+            <select
+              value={autoRefreshInterval}
+              onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+              className="bg-transparent text-xs text-slate-200 font-semibold focus:outline-none cursor-pointer pr-1"
+              title="Automatic background polling cadence"
+            >
+              <option value={0} className="bg-slate-900 text-slate-300">Paused</option>
+              <option value={10} className="bg-slate-900 text-slate-300">10s (Fast)</option>
+              <option value={15} className="bg-slate-900 text-slate-300">15s (Standard)</option>
+              <option value={30} className="bg-slate-900 text-slate-300">30s (Balanced)</option>
+              <option value={60} className="bg-slate-900 text-slate-300">60s (Slow)</option>
+            </select>
+          </div>
 
           <button
             onClick={() => loadData(false)}

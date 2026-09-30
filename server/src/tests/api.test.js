@@ -135,7 +135,9 @@ describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
     const res = {
       writeHead(code, hdrs = {}) {
         statusCode = code;
-        responseHeaders = { ...responseHeaders, ...hdrs };
+        Object.entries(hdrs).forEach(([k, v]) => {
+          responseHeaders[k.toLowerCase()] = v;
+        });
         return res;
       },
       setHeader(name, val) {
@@ -303,6 +305,67 @@ describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
     assert.equal(res.statusCode, 200);
     assert.ok(res.body.targetUrl);
     assert.ok(res.body.qrDataUrl);
+  });
+
+  test('Export Handler serves filtered votes CSV via subpath rewrite and auth header', async () => {
+    const { default: exportHandler } = await import('../../../api/export.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/export?subpath=csv&status=valid',
+      query: { subpath: 'csv', status: 'valid' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await exportHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('text/csv'));
+    assert.ok(res.body.includes('Vote ID'));
+    assert.ok(res.body.includes('SM Name'));
+  });
+
+  test('Export Handler verifies token via query param and serves leaderboard CSV', async () => {
+    const { default: exportHandler } = await import('../../../api/export.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: `/api/export?subpath=leaderboard&branch=All&token=${token}`,
+      query: { subpath: 'leaderboard', branch: 'All', token }
+    });
+
+    await exportHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('text/csv'));
+    assert.ok(res.body.includes('Rank'));
+    assert.ok(res.body.includes('SM Name'));
+  });
+
+  test('Export Handler serves system security audit logs CSV via subpath rewrite', async () => {
+    const { default: exportHandler } = await import('../../../api/export.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: `/api/export?subpath=system-logs&token=${token}`,
+      query: { subpath: 'system-logs', token }
+    });
+
+    await exportHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('text/csv'));
+    assert.ok(res.body.includes('Log ID'));
+    assert.ok(res.body.includes('Admin / Initiator'));
   });
 });
 
