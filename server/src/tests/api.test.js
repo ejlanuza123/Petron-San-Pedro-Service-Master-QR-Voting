@@ -367,6 +367,92 @@ describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
     assert.ok(res.body.includes('Log ID'));
     assert.ok(res.body.includes('Admin / Initiator'));
   });
+
+  test('Votes Handler ignores undefined and null query strings in getVotes', async () => {
+    const { default: votesHandler } = await import('../../../api/votes.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/votes?status=undefined&branch=undefined',
+      query: { status: 'undefined', branch: 'undefined' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await votesHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(Array.isArray(res.body.votes));
+    assert.ok(res.body.votes.length > 0, 'Should not return empty array when status is "undefined" string');
+  });
+
+  test('Votes Handler serves audit logs via subpath rewrite', async () => {
+    const { default: votesHandler } = await import('../../../api/votes.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/votes?subpath=audit-logs',
+      query: { subpath: 'audit-logs' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await votesHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(Array.isArray(res.body.logs));
+    assert.ok(typeof res.body.count === 'number');
+  });
+
+  test('Vote submission creates VOTE_CAST audit log and blocked attempt creates VOTE_BLOCKED audit log', async () => {
+    const { default: voteHandler } = await import('../../../api/vote.js');
+    const sms = db.getSMs();
+    const sm = sms[0];
+
+    const initialLogsCount = db.getAuditLogs().length;
+
+    // 1. Submit valid vote
+    const uniqueFP = 'test_audit_voter_' + Date.now();
+    const { req: voteReq, res: voteRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/vote',
+      body: {
+        sm_id: sm.id,
+        voter_fingerprint: uniqueFP,
+        mode: 'general'
+      }
+    });
+
+    await voteHandler(voteReq, voteRes);
+    assert.equal(voteRes.statusCode, 201);
+
+    const latestLog = db.getAuditLogs(1)[0];
+    assert.ok(latestLog.action === 'VOTE_CAST' || latestLog.action === 'VOTE_FLAGGED');
+    assert.equal(latestLog.target_id, voteRes.body.vote_id);
+
+    // 2. Attempt duplicate vote immediately -> Should be blocked and logged as VOTE_BLOCKED
+    const { req: dupReq, res: dupRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/vote',
+      body: {
+        sm_id: sm.id,
+        voter_fingerprint: uniqueFP,
+        mode: 'general'
+      }
+    });
+
+    await voteHandler(dupReq, dupRes);
+    assert.equal(dupRes.statusCode, 403);
+
+    const blockedLog = db.getAuditLogs(1)[0];
+    assert.equal(blockedLog.action, 'VOTE_BLOCKED');
+    assert.equal(blockedLog.target_id, sm.id);
+  });
 });
+
 
 

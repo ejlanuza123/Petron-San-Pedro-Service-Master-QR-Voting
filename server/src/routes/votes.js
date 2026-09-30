@@ -51,6 +51,21 @@ router.post('/', rateLimit({ windowMs: 60000, max: 10 }), (req, res) => {
 
   // If disallowed (e.g. duplicate vote, kill switch, outside hours, invalid SM)
   if (!evaluation.allowed) {
+    db.logAction({
+      admin_id: 'system',
+      action: 'VOTE_BLOCKED',
+      target_id: sm_id,
+      details: {
+        error: evaluation.error,
+        message: evaluation.message,
+        voter_fingerprint,
+        ip_address,
+        sm_name: targetSM.name,
+        branch: targetSM.branch,
+        mode: voteMode
+      }
+    });
+
     return res.status(403).json({
       error: evaluation.error,
       message: evaluation.message
@@ -68,6 +83,24 @@ router.post('/', rateLimit({ windowMs: 60000, max: 10 }), (req, res) => {
     status: evaluation.status, // 'valid' or 'flagged'
     flag_reason: evaluation.reason,
     is_test: campaign.test_mode
+  });
+
+  // Log in system security audit trail
+  db.logAction({
+    admin_id: 'voter',
+    action: newVote.status === 'flagged' ? 'VOTE_FLAGGED' : 'VOTE_CAST',
+    target_id: newVote.id,
+    details: {
+      sm_id,
+      sm_name: targetSM.name,
+      sm_branch: targetSM.branch,
+      mode: voteMode,
+      status: newVote.status,
+      flag_reason: evaluation.reason || null,
+      ip: ip_address,
+      fingerprint: voter_fingerprint,
+      is_test: newVote.is_test
+    }
   });
 
   res.status(201).json({
@@ -98,6 +131,13 @@ router.get('/', authenticateToken, (req, res) => {
   });
 
   res.json({ votes, count: votes.length });
+});
+
+// GET /api/votes/audit-logs - Audit trail of system & security actions (Admin only)
+router.get('/audit-logs', authenticateToken, (req, res) => {
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : 100;
+  const logs = db.getAuditLogs(limit);
+  res.json({ logs, count: logs.length });
 });
 
 // GET /api/votes/flagged - Flagged queue needing review (Admin only)

@@ -427,6 +427,9 @@ export async function handleRequest(req, res) {
       if (!sm_id) return res.error('Please select a Service Master.', 400, 'MISSING_SM');
       if (!voter_fingerprint) return res.error('Voter verification failed.', 400, 'MISSING_FINGERPRINT');
 
+      const targetSM = db.getSMById(sm_id);
+      if (!targetSM) return res.error('Selected Service Master does not exist.', 404, 'NOT_FOUND');
+
       const evaluation = FraudEngine.evaluateVote({
         sm_id,
         voter_fingerprint,
@@ -436,10 +439,23 @@ export async function handleRequest(req, res) {
       });
 
       if (!evaluation.allowed) {
+        await db.logAction({
+          admin_id: 'system',
+          action: 'VOTE_BLOCKED',
+          target_id: sm_id,
+          details: {
+            error: evaluation.error,
+            message: evaluation.message,
+            voter_fingerprint,
+            ip_address: ip,
+            sm_name: targetSM.name,
+            branch: targetSM.branch,
+            mode: mode || 'general'
+          }
+        });
         return res.error(evaluation.message, 403, evaluation.error);
       }
 
-      const targetSM = db.getSMById(sm_id);
       const campaign = db.getActiveCampaign();
 
       const newVote = await db.createVote({
@@ -491,7 +507,10 @@ export async function handleRequest(req, res) {
       const votes = db.getVotes({
         status: parsedUrl.searchParams.get('status'),
         branch: parsedUrl.searchParams.get('branch'),
-        mode: parsedUrl.searchParams.get('mode')
+        mode: parsedUrl.searchParams.get('mode'),
+        startDate: parsedUrl.searchParams.get('startDate'),
+        endDate: parsedUrl.searchParams.get('endDate'),
+        excludeTest: parsedUrl.searchParams.get('excludeTest') === 'true'
       });
       return res.json({ votes, count: votes.length });
     }

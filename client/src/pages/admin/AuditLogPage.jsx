@@ -56,13 +56,18 @@ export default function AuditLogPage({ branches = [] }) {
     if (logView === 'ballots') {
       loadVotes();
     }
-  }, [statusFilter, branchFilter, modeFilter, startDate, endDate]);
+  }, [logView, statusFilter, branchFilter, modeFilter, startDate, endDate]);
 
   useEffect(() => {
     if (logView === 'system') {
       loadSystemLogs();
     }
   }, [logView]);
+
+  useEffect(() => {
+    // Populate system logs on mount for tab counter badge
+    loadSystemLogs();
+  }, []);
 
   const handleRefresh = () => {
     if (logView === 'ballots') loadVotes();
@@ -83,9 +88,12 @@ export default function AuditLogPage({ branches = [] }) {
   const filtered = votes.filter((v) => {
     const q = search.toLowerCase();
     return (
-      v.id.toLowerCase().includes(q) ||
+      (v.id && v.id.toLowerCase().includes(q)) ||
       (v.sm_name && v.sm_name.toLowerCase().includes(q)) ||
+      (v.sm_branch && v.sm_branch.toLowerCase().includes(q)) ||
+      (v.branch && v.branch.toLowerCase().includes(q)) ||
       (v.ip_address && v.ip_address.toLowerCase().includes(q)) ||
+      (v.flag_reason && v.flag_reason.toLowerCase().includes(q)) ||
       (v.voter_fingerprint && v.voter_fingerprint.toLowerCase().includes(q))
     );
   });
@@ -408,6 +416,8 @@ export default function AuditLogPage({ branches = [] }) {
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                 : log.action === 'VOTE_FLAGGED'
                                 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : log.action === 'VOTE_BLOCKED'
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                                 : log.action === 'ADMIN_LOGIN'
                                 ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                                 : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'

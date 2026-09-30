@@ -100,7 +100,13 @@ export const api = {
 
   // Admin Dashboard endpoints
   getVotes: async (filters = {}) => {
-    const query = new URLSearchParams(filters).toString();
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '' && v !== 'undefined' && v !== 'null') {
+        queryParams.set(k, v);
+      }
+    });
+    const query = queryParams.toString();
     const res = await fetch(`/api/votes${query ? `?${query}` : ''}`, {
       headers: { ...getAuthHeaders() }
     });
@@ -244,7 +250,7 @@ export const api = {
   exportVotesCSV: async (filters = {}) => {
     const query = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') query.set(k, v);
+      if (v !== undefined && v !== null && v !== '' && v !== 'undefined' && v !== 'null') query.set(k, v);
     });
     const res = await fetch(`/api/export/csv?${query.toString()}`, {
       headers: { ...getAuthHeaders() }

@@ -540,28 +540,34 @@ class Database {
   getVotes(filter = {}) {
     let result = [...this.data.votes];
 
-    if (filter.status) {
-      result = result.filter(v => v.status === filter.status);
+    const isValid = (val) => val !== undefined && val !== null && val !== '' && val !== 'undefined' && val !== 'null';
+
+    if (isValid(filter.status) && filter.status.toLowerCase() !== 'all') {
+      result = result.filter(v => v.status && v.status.toLowerCase() === filter.status.toLowerCase());
     }
-    if (filter.sm_id) {
+    if (isValid(filter.sm_id)) {
       result = result.filter(v => v.sm_id === filter.sm_id);
     }
-    if (filter.branch) {
+    if (isValid(filter.branch) && filter.branch.toLowerCase() !== 'all') {
       result = result.filter(v => v.branch && v.branch.toLowerCase() === filter.branch.toLowerCase());
     }
-    if (filter.mode) {
+    if (isValid(filter.mode) && filter.mode.toLowerCase() !== 'all') {
       result = result.filter(v => v.mode === filter.mode);
     }
     if (filter.excludeTest) {
       result = result.filter(v => !v.is_test);
     }
-    if (filter.startDate) {
+    if (isValid(filter.startDate)) {
       const start = new Date(filter.startDate);
-      result = result.filter(v => new Date(v.timestamp) >= start);
+      if (!isNaN(start.getTime())) {
+        result = result.filter(v => new Date(v.timestamp) >= start);
+      }
     }
-    if (filter.endDate) {
+    if (isValid(filter.endDate)) {
       const end = new Date(filter.endDate);
-      result = result.filter(v => new Date(v.timestamp) <= end);
+      if (!isNaN(end.getTime())) {
+        result = result.filter(v => new Date(v.timestamp) <= end);
+      }
     }
 
     // Attach SM metadata for ease of frontend consumption
