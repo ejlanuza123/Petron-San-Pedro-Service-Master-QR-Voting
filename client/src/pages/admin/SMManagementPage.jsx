@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Edit2, Trash2, ShieldCheck, Smartphone, Check, 
   X, MapPin, Award, Copy, Loader2 
@@ -30,6 +30,18 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
 
   const { fingerprint } = useFingerprint();
   const { success, error } = useToast();
+
+  // Close modals on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (isModalOpen) setIsModalOpen(false);
+        if (pairingSM) setPairingSM(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, pairingSM]);
 
   const handleOpenPairing = async (sm) => {
     setPairingSM(sm);
@@ -277,134 +289,146 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
 
       {/* Add / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative overflow-hidden">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full max-h-[92vh] sm:max-h-[88vh] flex flex-col shadow-2xl relative overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header - Always pinned at top */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900 shrink-0 z-10">
               <h3 className="font-bold text-base text-white">
                 {editingSM ? `Edit: ${editingSM.name}` : 'Add Service Master'}
               </h3>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+                className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors"
+                title="Close (Esc)"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Carlos Mendoza"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 text-xs">
+              <div className="p-5 overflow-y-auto flex-1 space-y-3.5 overscroll-contain">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Branch *</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Full Name *</label>
                   <input
                     type="text"
                     required
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    placeholder="San Pedro Main"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Carlos Mendoza"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Branch *</label>
+                    <input
+                      type="text"
+                      required
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      placeholder="San Pedro Main"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Bay / Station</label>
+                    <input
+                      type="text"
+                      value={station}
+                      onChange={(e) => setStation(e.target.value)}
+                      placeholder="Lube Bay 1"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Shift</label>
+                    <input
+                      type="text"
+                      value={shift}
+                      onChange={(e) => setShift(e.target.value)}
+                      placeholder="Day Shift (6AM - 2PM)"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Photo URL</label>
+                    <input
+                      type="url"
+                      value={photoUrl}
+                      onChange={(e) => setPhotoUrl(e.target.value)}
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Bay / Station</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Bio / Highlight</label>
+                  <textarea
+                    rows="2"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="Specialist credentials, certifications, customer compliments..."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+
+                {/* Anti-cheat calibration box */}
+                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Anti-Self-Voting Shield Calibration</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCalibrateCurrentDevice}
+                      className="text-[10px] text-blue-400 hover:underline"
+                    >
+                      Use This Device Fingerprint
+                    </button>
+                  </div>
                   <input
                     type="text"
-                    value={station}
-                    onChange={(e) => setStation(e.target.value)}
-                    placeholder="Lube Bay 1"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    value={deviceFingerprint}
+                    onChange={(e) => setDeviceFingerprint(e.target.value)}
+                    placeholder="Registered Device Fingerprint Hash"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-300"
                   />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Shift</label>
                   <input
                     type="text"
-                    value={shift}
-                    onChange={(e) => setShift(e.target.value)}
-                    placeholder="Day Shift (6AM - 2PM)"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Photo URL</label>
-                  <input
-                    type="url"
-                    value={photoUrl}
-                    onChange={(e) => setPhotoUrl(e.target.value)}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    value={ipRegistered}
+                    onChange={(e) => setIpRegistered(e.target.value)}
+                    placeholder="Registered Station/Home IP (optional)"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-300"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Bio / Highlight</label>
-                <textarea
-                  rows="2"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Specialist credentials, certifications, customer compliments..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                />
-              </div>
-
-              {/* Anti-cheat calibration box */}
-              <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-amber-300 flex items-center gap-1.5">
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Anti-Self-Voting Shield Calibration</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCalibrateCurrentDevice}
-                    className="text-[10px] text-blue-400 hover:underline"
-                  >
-                    Use This Device Fingerprint
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={deviceFingerprint}
-                  onChange={(e) => setDeviceFingerprint(e.target.value)}
-                  placeholder="Registered Device Fingerprint Hash"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-300"
-                />
-                <input
-                  type="text"
-                  value={ipRegistered}
-                  onChange={(e) => setIpRegistered(e.target.value)}
-                  placeholder="Registered Station/Home IP (optional)"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-300"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+              {/* Footer - Always pinned at bottom */}
+              <div className="px-5 py-3.5 border-t border-slate-800 bg-slate-900 shrink-0 flex justify-end gap-2 z-10">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white"
+                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30"
+                  className="px-5 py-2 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 disabled:opacity-50 transition-colors"
                 >
                   {submitting ? 'Saving...' : 'Save Service Master'}
                 </button>
@@ -416,10 +440,16 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
 
       {/* Staff Phone Pairing QR Modal */}
       {pairingSM && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in overflow-y-auto"
+          onClick={(e) => { if (e.target === e.currentTarget) setPairingSM(null); }}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full max-h-[92vh] sm:max-h-[88vh] flex flex-col shadow-2xl relative overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header - Always pinned at top */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900 shrink-0 z-10">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
                   <Smartphone className="w-5 h-5" />
@@ -430,15 +460,17 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setPairingSM(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors"
+                title="Close (Esc)"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Content Body */}
-            <div className="space-y-4 text-center">
+            {/* Content Body - Scrollable */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-4 text-center overscroll-contain">
               {/* Device Status */}
               <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/80 border border-slate-700/60 text-left">
                 <div>
@@ -491,9 +523,9 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
               </div>
 
               {/* QR Container */}
-              <div className="bg-white p-4 rounded-2xl inline-block shadow-xl shadow-black/40 border-4 border-emerald-500/30 relative">
+              <div className="bg-white p-3 sm:p-4 rounded-2xl inline-block shadow-xl shadow-black/40 border-4 border-emerald-500/30 relative">
                 {loadingPairing ? (
-                  <div className="w-52 h-52 flex flex-col items-center justify-center gap-3">
+                  <div className="w-48 h-48 sm:w-52 sm:h-52 flex flex-col items-center justify-center gap-3">
                     <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
                     <span className="text-xs text-slate-600 font-medium">Generating secure pairing key...</span>
                   </div>
@@ -501,10 +533,10 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
                   <img
                     src={pairingQRData.qrDataUrl}
                     alt="Staff Pairing QR"
-                    className="w-52 h-52 object-contain"
+                    className="w-48 h-48 sm:w-52 sm:h-52 object-contain"
                   />
                 ) : (
-                  <div className="w-52 h-52 flex items-center justify-center text-xs text-rose-500">
+                  <div className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center text-xs text-rose-500">
                     Failed to load pairing QR
                   </div>
                 )}
@@ -525,8 +557,8 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="mt-5 pt-3 border-t border-slate-800 flex justify-end">
+            {/* Modal Footer - Always pinned at bottom */}
+            <div className="px-5 py-3.5 border-t border-slate-800 bg-slate-900 shrink-0 flex justify-end z-10">
               <button
                 type="button"
                 onClick={() => setPairingSM(null)}

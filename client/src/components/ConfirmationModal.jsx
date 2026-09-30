@@ -1,17 +1,44 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Award, Check, X, ShieldAlert } from 'lucide-react';
 
 export default function ConfirmationModal({ isOpen, onClose, onConfirm, sm, loading }) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !loading) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, loading, onClose]);
+
   if (!isOpen || !sm) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center relative overflow-hidden">
-        {/* Glow circle */}
-        <div className="absolute -top-12 -left-12 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl" />
-        <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl" />
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in overflow-y-auto"
+      onClick={(e) => { if (e.target === e.currentTarget && !loading) onClose(); }}
+    >
+      <div 
+        className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full max-h-[92vh] sm:max-h-[88vh] flex flex-col shadow-2xl text-center relative overflow-hidden my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Glow circles */}
+        <div className="absolute -top-12 -left-12 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative">
+        {/* Top Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={loading}
+          className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors z-20 disabled:opacity-50"
+          title="Close (Esc)"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Scrollable Body */}
+        <div className="p-6 overflow-y-auto flex-1 overscroll-contain relative">
           <div className="w-20 h-20 mx-auto rounded-full p-1 bg-gradient-to-tr from-amber-400 to-blue-600 shadow-xl mb-4">
             <img
               src={sm.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=500&q=80'}
@@ -48,6 +75,7 @@ export default function ConfirmationModal({ isOpen, onClose, onConfirm, sm, load
             </button>
 
             <button
+              type="button"
               onClick={onClose}
               disabled={loading}
               className="w-full py-2.5 px-4 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
