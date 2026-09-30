@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, ShieldCheck, Smartphone, Check, X, MapPin, Award } from 'lucide-react';
+import { 
+  Plus, Edit2, Trash2, ShieldCheck, Smartphone, Check, 
+  X, MapPin, Award, Copy, Loader2 
+} from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import useFingerprint from '../../hooks/useFingerprint';
@@ -8,6 +11,12 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSM, setEditingSM] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Pairing state
+  const [pairingSM, setPairingSM] = useState(null);
+  const [pairingQRData, setPairingQRData] = useState(null);
+  const [loadingPairing, setLoadingPairing] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Form fields
   const [name, setName] = useState('');
@@ -21,6 +30,41 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
 
   const { fingerprint } = useFingerprint();
   const { success, error } = useToast();
+
+  const handleOpenPairing = async (sm) => {
+    setPairingSM(sm);
+    setPairingQRData(null);
+    setCopiedLink(false);
+    try {
+      setLoadingPairing(true);
+      const res = await api.getSMPairingQR(sm.id, window.location.origin);
+      setPairingQRData(res);
+    } catch (err) {
+      error(err.message || 'Failed to generate staff pairing QR');
+    } finally {
+      setLoadingPairing(false);
+    }
+  };
+
+  const handleCopyPairingLink = () => {
+    if (!pairingQRData?.targetUrl) return;
+    navigator.clipboard.writeText(pairingQRData.targetUrl);
+    setCopiedLink(true);
+    success('Pairing link copied to clipboard!');
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleUnregisterDevice = async (smId, smName) => {
+    if (!confirm(`Are you sure you want to unlink the registered smartphone for ${smName}?`)) return;
+    try {
+      await api.unregisterSMDevice(smId);
+      success(`Unlinked phone registration for ${smName}`);
+      setPairingSM(null);
+      onRefresh();
+    } catch (err) {
+      error(err.message || 'Failed to unlink device');
+    }
+  };
 
   const handleOpenAdd = () => {
     setEditingSM(null);
@@ -166,18 +210,34 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
                 </div>
               </div>
 
-              {/* Anti-cheat status pill */}
-              <div className="mt-3 p-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-[11px]">
-                <div className="flex items-center gap-1.5 text-slate-300 font-medium mb-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Anti-Self-Voting Shield:</span>
+              {/* Anti-cheat status pill & Quick Pair button */}
+              <div className="mt-3 p-2.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-[11px] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+                    <ShieldCheck className={`w-3.5 h-3.5 ${sm.device_fingerprint ? 'text-emerald-400' : 'text-amber-400'}`} />
+                    <span>Anti-Cheat Shield:</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    sm.device_fingerprint
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  }`}>
+                    {sm.device_fingerprint ? 'Phone Linked' : 'Unpaired'}
+                  </span>
                 </div>
-                <div className="text-[10px] text-slate-400 truncate">
-                  Fingerprint: {sm.device_fingerprint ? 'Registered' : 'None (click Edit to calibrate)'}
-                </div>
-                <div className="text-[10px] text-slate-400 truncate">
-                  IP: {sm.ip_registered || 'None'}
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenPairing(sm)}
+                  className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+                    sm.device_fingerprint
+                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shadow-emerald-900/30'
+                  }`}
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>{sm.device_fingerprint ? 'View / Change Paired Phone' : 'Pair Staff Smartphone (QR)'}</span>
+                </button>
               </div>
             </div>
 
@@ -350,6 +410,131 @@ export default function SMManagementPage({ sms = [], onRefresh }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Phone Pairing QR Modal */}
+      {pairingSM && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">Pair Staff Smartphone</h3>
+                  <p className="text-xs text-slate-400 font-medium">{pairingSM.name} &bull; {pairingSM.branch}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPairingSM(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="space-y-4 text-center">
+              {/* Device Status */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/80 border border-slate-700/60 text-left">
+                <div>
+                  <div className="text-[11px] text-slate-400 font-medium">Anti-Cheat Pairing Status</div>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
+                    {pairingSM.device_fingerprint ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-emerald-400">Smartphone Registered</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-amber-400" />
+                        <span className="text-amber-400">Unpaired / Not Registered</span>
+                      </>
+                    )}
+                  </div>
+                  {pairingSM.device_fingerprint && (
+                    <div className="text-[10px] font-mono text-slate-500 mt-1 truncate max-w-[220px]">
+                      FP: {pairingSM.device_fingerprint}
+                    </div>
+                  )}
+                </div>
+
+                {pairingSM.device_fingerprint && (
+                  <button
+                    type="button"
+                    onClick={() => handleUnregisterDevice(pairingSM.id, pairingSM.name)}
+                    className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-2.5 py-1.5 rounded-lg border border-rose-500/30 transition-colors"
+                  >
+                    Unlink
+                  </button>
+                )}
+              </div>
+
+              {/* Instructions */}
+              <div className="text-xs text-slate-300 bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-left space-y-1">
+                <div className="font-semibold text-blue-300 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-blue-400" />
+                  <span>How Staff Phone Pairing Works:</span>
+                </div>
+                <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-0.5">
+                  <li>Ask <span className="font-semibold text-white">{pairingSM.name}</span> to open camera on their personal phone.</li>
+                  <li>Scan the emerald QR code below directly from your computer monitor.</li>
+                  <li>Tap the link and hit <span className="font-semibold text-white">"Confirm &amp; Pair This Phone"</span>.</li>
+                </ol>
+                <div className="text-[10px] text-blue-200/80 pt-1 border-t border-blue-500/20">
+                  ⚡ Once paired, any self-votes cast from this phone for {pairingSM.name} are quarantined in the Fraud Queue. Regular customer votes remain completely unaffected.
+                </div>
+              </div>
+
+              {/* QR Container */}
+              <div className="bg-white p-4 rounded-2xl inline-block shadow-xl shadow-black/40 border-4 border-emerald-500/30 relative">
+                {loadingPairing ? (
+                  <div className="w-52 h-52 flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                    <span className="text-xs text-slate-600 font-medium">Generating secure pairing key...</span>
+                  </div>
+                ) : pairingQRData?.qrDataUrl ? (
+                  <img
+                    src={pairingQRData.qrDataUrl}
+                    alt="Staff Pairing QR"
+                    className="w-52 h-52 object-contain"
+                  />
+                ) : (
+                  <div className="w-52 h-52 flex items-center justify-center text-xs text-rose-500">
+                    Failed to load pairing QR
+                  </div>
+                )}
+              </div>
+
+              {/* Copy URL fallback */}
+              {pairingQRData?.targetUrl && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleCopyPairingLink}
+                    className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors bg-slate-800 hover:bg-slate-750 px-3 py-1.5 rounded-lg border border-slate-700"
+                  >
+                    {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedLink ? 'Link Copied!' : 'Copy Direct Pairing Link (or send via chat)'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="mt-5 pt-3 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPairingSM(null)}
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

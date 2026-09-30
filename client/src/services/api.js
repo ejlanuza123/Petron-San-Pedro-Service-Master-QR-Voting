@@ -175,6 +175,29 @@ export const api = {
     return handleResponse(res);
   },
 
+  getSMPairingToken: async (id) => {
+    const res = await fetch(`/api/sms/${id}/pair-token`, {
+      headers: { ...getAuthHeaders() }
+    });
+    return handleResponse(res);
+  },
+
+  getSMPairingQR: async (id, baseUrl) => {
+    const query = baseUrl ? `?baseUrl=${encodeURIComponent(baseUrl)}` : '';
+    const res = await fetch(`/api/qr/pair/${id}${query}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    return handleResponse(res);
+  },
+
+  unregisterSMDevice: async (id) => {
+    const res = await fetch(`/api/sms/${id}/unregister-device`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders() }
+    });
+    return handleResponse(res);
+  },
+
   // Campaign & Rules Settings
   updateCampaign: async (settings) => {
     const res = await fetch('/api/campaign', {

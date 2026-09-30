@@ -1,6 +1,7 @@
 import express from 'express';
 import db from '../db/database.js';
 import QRService from '../services/qrService.js';
+import { generatePairingToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -70,6 +71,33 @@ router.get('/all-sms', async (req, res) => {
     res.json({ count: batch.length, batch });
   } catch (err) {
     res.status(500).json({ error: 'QR_BATCH_GEN_FAILED', message: err.message });
+  }
+});
+
+// GET /api/qr/pair/:id - Get Staff Device Pairing QR
+router.get('/pair/:id', async (req, res) => {
+  try {
+    const sm = db.getSMById(req.params.id);
+    if (!sm) {
+      return res.status(404).json({ error: 'NOT_FOUND', message: 'Service Master not found' });
+    }
+
+    const token = generatePairingToken(sm.id);
+    const baseUrl = req.query.baseUrl || getClientBaseUrl(req);
+    const qrData = await QRService.generateDevicePairingQR(baseUrl, sm.id, token);
+
+    res.json({
+      ...qrData,
+      token,
+      sm: {
+        id: sm.id,
+        name: sm.name,
+        branch: sm.branch,
+        device_fingerprint: sm.device_fingerprint
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'QR_GEN_FAILED', message: err.message });
   }
 });
 

@@ -1,6 +1,6 @@
 import express from 'express';
 import db from '../db/database.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, generatePairingToken, verifyPairingToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -91,8 +91,50 @@ router.delete('/:id', authenticateToken, (req, res) => {
   res.json({ success: true, message: 'Service Master deleted successfully' });
 });
 
-// POST /api/sms/:id/register-device - Calibrate anti-self-vote fingerprint
-router.post('/:id/register-device', authenticateToken, (req, res) => {
+// GET /api/sms/:id/pair-token - Get pairing token for SM device binding (Admin only)
+router.get('/:id/pair-token', authenticateToken, (req, res) => {
+  const sm = db.getSMById(req.params.id);
+  if (!sm) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: 'Service Master not found' });
+  }
+  const token = generatePairingToken(sm.id);
+  res.json({ token, sm_id: sm.id });
+});
+
+// POST /api/sms/:id/unregister-device - Unlink device fingerprint (Admin only)
+router.post('/:id/unregister-device', authenticateToken, (req, res) => {
+  const sm = db.getSMById(req.params.id);
+  if (!sm) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: 'Service Master not found' });
+  }
+
+  const updated = db.updateSM(req.params.id, {
+    device_fingerprint: null,
+    ip_registered: null
+  });
+
+  db.logAction({
+    admin_id: req.user.id,
+    action: 'UNREGISTER_SM_DEVICE',
+    target_id: sm.id,
+    details: `Unlinked anti-self-vote hardware profile for ${sm.name}`
+  });
+
+  res.json({ sm: updated, message: 'Device unlinked successfully' });
+});
+
+// POST /api/sms/:id/register-device - Calibrate anti-self-vote fingerprint (Admin or via pairing token)
+router.post('/:id/register-device', (req, res, next) => {
+  const { token } = req.body;
+  if (token) {
+    if (!verifyPairingToken(req.params.id, token)) {
+      return res.status(403).json({ error: 'INVALID_TOKEN', message: 'Pairing QR code expired or invalid' });
+    }
+    req.user = { id: 'staff_pairing_token', username: 'staff_self_pairing' };
+    return next();
+  }
+  authenticateToken(req, res, next);
+}, (req, res) => {
   const { device_fingerprint, ip_address } = req.body;
   const sm = db.getSMById(req.params.id);
 
@@ -100,13 +142,17 @@ router.post('/:id/register-device', authenticateToken, (req, res) => {
     return res.status(404).json({ error: 'NOT_FOUND', message: 'Service Master not found' });
   }
 
+  if (!device_fingerprint) {
+    return res.status(400).json({ error: 'MISSING_FINGERPRINT', message: 'Device fingerprint is required' });
+  }
+
   const updated = db.updateSM(req.params.id, {
-    device_fingerprint: device_fingerprint || sm.device_fingerprint,
-    ip_registered: ip_address || sm.ip_registered
+    device_fingerprint,
+    ip_registered: ip_address || req.ip || sm.ip_registered
   });
 
   db.logAction({
-    admin_id: req.user.id,
+    admin_id: req.user?.id || 'pairing_system',
     action: 'REGISTER_SM_DEVICE',
     target_id: sm.id,
     details: `Calibrated anti-self-vote hardware profile for ${sm.name}`
