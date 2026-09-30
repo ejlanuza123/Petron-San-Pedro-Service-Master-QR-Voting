@@ -12,6 +12,7 @@ import api from './services/api';
 const ScannerPage = lazy(() => import('./pages/ScannerPage'));
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const PairDevicePage = lazy(() => import('./pages/PairDevicePage'));
 
 function PageLoadingFallback({ message = 'Loading interface...' }) {
   return (
@@ -28,6 +29,7 @@ export default function App() {
   const [campaignStatus, setCampaignStatus] = useState(null);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [lastVoteData, setLastVoteData] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine ?? true);
 
   // Parse path on initial load & handle back/forward navigation
   const parsePath = () => {
@@ -36,6 +38,9 @@ export default function App() {
 
     if (smMatch && smMatch[1]) {
       return { name: 'sm-vote', smId: decodeURIComponent(smMatch[1]) };
+    }
+    if (path.startsWith('/pair-device')) {
+      return { name: 'pair-device' };
     }
     if (path === '/scan' || path === '/scanner') {
       return { name: 'scanner' };
@@ -53,6 +58,19 @@ export default function App() {
   };
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     setCurrentRoute(parsePath());
 
     const handlePopState = () => {
@@ -68,6 +86,7 @@ export default function App() {
     if (updateHistory) {
       let path = '/';
       if (route.name === 'sm-vote') path = `/vote/sm/${encodeURIComponent(route.smId)}`;
+      else if (route.name === 'pair-device') path = window.location.pathname + window.location.search;
       else if (route.name === 'scanner') path = '/scan';
       else if (route.name === 'admin-login') path = '/admin/login';
       else if (route.name === 'admin') path = '/admin';
@@ -106,6 +125,13 @@ export default function App() {
         campaignStatus={campaignStatus}
       />
 
+      {!isOnline && (
+        <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold text-center flex items-center justify-center gap-2 shadow-md animate-pulse">
+          <span className="w-2 h-2 rounded-full bg-slate-950" />
+          <span>You are currently offline. Check your internet connection to cast ballots.</span>
+        </div>
+      )}
+
       <main className="flex-1">
         {currentRoute.name === 'home' && (
           <GeneralVotingPage
@@ -121,6 +147,12 @@ export default function App() {
             onBackToGeneral={() => navigateTo({ name: 'home' })}
             campaignStatus={campaignStatus}
           />
+        )}
+
+        {currentRoute.name === 'pair-device' && (
+          <Suspense fallback={<PageLoadingFallback message="Loading security device pairing..." />}>
+            <PairDevicePage onReturnHome={() => navigateTo({ name: 'home' })} />
+          </Suspense>
         )}
 
         {currentRoute.name === 'scanner' && (

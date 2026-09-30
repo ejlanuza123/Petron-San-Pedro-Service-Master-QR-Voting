@@ -48,11 +48,18 @@ export default function SMVotingPage({ smId, onVoteSuccess, onBackToGeneral, cam
 
     try {
       setSubmitting(true);
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate([30, 40, 30]);
+      }
       const res = await api.submitVote({
         sm_id: sm.id,
         voter_fingerprint: fingerprint,
         mode: 'sm_specific'
       });
+
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate([100, 40, 100]);
+      }
 
       onVoteSuccess({
         vote_id: res.vote_id,

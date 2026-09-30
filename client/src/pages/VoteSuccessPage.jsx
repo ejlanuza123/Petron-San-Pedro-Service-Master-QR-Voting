@@ -4,6 +4,12 @@ import confetti from 'canvas-confetti';
 
 export default function VoteSuccessPage({ voteData, onReturnHome }) {
   useEffect(() => {
+    try {
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate([100, 50, 100]);
+      }
+    } catch {}
+
     // Fire festive celebratory confetti on vote completion
     try {
       confetti({
@@ -16,6 +22,29 @@ export default function VoteSuccessPage({ voteData, onReturnHome }) {
       // ignore if confetti unsupported
     }
   }, []);
+
+  const handleShare = async () => {
+    const smName = voteData?.sm_name || 'my favorite Service Master';
+    const shareText = `I just voted for ${smName} for Petron Service Master of the Month! Vote for your favorite Service Master:`;
+    const shareUrl = window.location.origin;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Petron Service Master of the Month',
+          text: shareText,
+          url: shareUrl
+        });
+      } catch {
+        // user cancelled
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${shareText} ${shareUrl}`);
+        alert('Voting link copied to clipboard!');
+      } catch {}
+    }
+  };
 
   return (
     <div className="max-w-md mx-auto px-4 py-12 sm:py-16 text-center animate-in fade-in zoom-in-95 duration-300">
@@ -68,6 +97,14 @@ export default function VoteSuccessPage({ voteData, onReturnHome }) {
           )}
 
           <div className="mt-6 space-y-2.5">
+            <button
+              onClick={handleShare}
+              className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600/80 transition-all flex items-center justify-center gap-2"
+            >
+              <Share2 className="w-4 h-4 text-emerald-400" />
+              <span>Share Appreciation</span>
+            </button>
+
             <button
               onClick={onReturnHome}
               className="w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2"

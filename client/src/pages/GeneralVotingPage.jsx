@@ -64,11 +64,18 @@ export default function GeneralVotingPage({ onVoteSuccess, campaignStatus }) {
     if (!selectedSM) return;
     try {
       setSubmitting(true);
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate([30, 40, 30]);
+      }
       const res = await api.submitVote({
         sm_id: selectedSM.id,
         voter_fingerprint: fingerprint,
         mode: 'general'
       });
+
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate([100, 40, 100]);
+      }
 
       setIsModalOpen(false);
       onVoteSuccess({

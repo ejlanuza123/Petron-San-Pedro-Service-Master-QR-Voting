@@ -25,7 +25,16 @@ export default function ScannerPage({ onScanSuccess, onBack }) {
         (decodedText) => {
           // Check if decoded text is an SM vote URL or SM ID
           console.log('Scanned QR:', decodedText);
+          if (window.navigator?.vibrate) {
+            window.navigator.vibrate(50);
+          }
           html5QrcodeScanner.clear().catch(() => {});
+
+          // Handle staff device pairing QR code scan
+          if (decodedText.includes('/pair-device')) {
+            window.location.href = decodedText;
+            return;
+          }
 
           // Parse sm id from URL: e.g. /vote/sm/sm-001 or raw sm-001
           const match = decodedText.match(/\/vote\/sm\/([^/?#]+)/i);
