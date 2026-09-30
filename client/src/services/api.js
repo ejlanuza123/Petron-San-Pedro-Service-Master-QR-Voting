@@ -199,6 +199,22 @@ export const api = {
       headers: { ...getAuthHeaders() }
     });
     return handleResponse(res);
+  },
+
+  // Database & Cloud Persistence
+  getDatabaseStatus: async () => {
+    const res = await fetch('/api/database/status', {
+      headers: { ...getAuthHeaders() }
+    });
+    return handleResponse(res);
+  },
+
+  syncDatabase: async () => {
+    const res = await fetch('/api/database/sync', {
+      method: 'POST',
+      headers: { ...getAuthHeaders() }
+    });
+    return handleResponse(res);
   }
 };
 

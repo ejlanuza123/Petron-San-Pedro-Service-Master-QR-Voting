@@ -1,15 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import PrivacyModal from './components/PrivacyModal';
 import GeneralVotingPage from './pages/GeneralVotingPage';
 import SMVotingPage from './pages/SMVotingPage';
 import VoteSuccessPage from './pages/VoteSuccessPage';
-import ScannerPage from './pages/ScannerPage';
-import AdminLoginPage from './pages/AdminLoginPage';
-import AdminDashboard from './pages/admin/AdminDashboard';
 import { useAuth } from './context/AuthContext';
 import api from './services/api';
+
+// Code-split heavy routes to keep voter bundle ultra-lightweight
+const ScannerPage = lazy(() => import('./pages/ScannerPage'));
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+
+function PageLoadingFallback({ message = 'Loading interface...' }) {
+  return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+      <p className="text-xs text-slate-400 font-medium tracking-wide">{message}</p>
+    </div>
+  );
+}
 
 export default function App() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -113,10 +124,12 @@ export default function App() {
         )}
 
         {currentRoute.name === 'scanner' && (
-          <ScannerPage
-            onScanSuccess={(scannedSMId) => navigateTo({ name: 'sm-vote', smId: scannedSMId })}
-            onBack={() => navigateTo({ name: 'home' })}
-          />
+          <Suspense fallback={<PageLoadingFallback message="Initializing camera scanner..." />}>
+            <ScannerPage
+              onScanSuccess={(scannedSMId) => navigateTo({ name: 'sm-vote', smId: scannedSMId })}
+              onBack={() => navigateTo({ name: 'home' })}
+            />
+          </Suspense>
         )}
 
         {currentRoute.name === 'success' && (
@@ -127,21 +140,25 @@ export default function App() {
         )}
 
         {currentRoute.name === 'admin-login' && (
-          <AdminLoginPage
-            onLoginSuccess={() => navigateTo({ name: 'admin' })}
-          />
-        )}
-
-        {currentRoute.name === 'admin' && (
-          isAuthenticated ? (
-            <AdminDashboard
-              onLogout={() => navigateTo({ name: 'home' })}
-            />
-          ) : (
+          <Suspense fallback={<PageLoadingFallback message="Loading admin portal..." />}>
             <AdminLoginPage
               onLoginSuccess={() => navigateTo({ name: 'admin' })}
             />
-          )
+          </Suspense>
+        )}
+
+        {currentRoute.name === 'admin' && (
+          <Suspense fallback={<PageLoadingFallback message="Loading admin audit dashboard..." />}>
+            {isAuthenticated ? (
+              <AdminDashboard
+                onLogout={() => navigateTo({ name: 'home' })}
+              />
+            ) : (
+              <AdminLoginPage
+                onLoginSuccess={() => navigateTo({ name: 'admin' })}
+              />
+            )}
+          </Suspense>
         )}
       </main>
 

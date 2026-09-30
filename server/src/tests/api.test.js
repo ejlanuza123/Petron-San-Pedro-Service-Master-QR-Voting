@@ -62,6 +62,14 @@ describe('Database and Services Verification', () => {
 
   test('Staff device registration and fraud engine quarantine works end-to-end', async () => {
     const { default: FraudEngine } = await import('../services/fraudEngine.js');
+    const campaign = db.getActiveCampaign();
+    db.updateCampaign(campaign.id, {
+      start_date: new Date(Date.now() - 86400000).toISOString(),
+      end_date: new Date(Date.now() + 30 * 86400000).toISOString(),
+      kill_switch: false,
+      enforce_operating_hours: false
+    });
+
     const sms = db.getSMs();
     const sm = sms[0];
     const originalFP = sm.device_fingerprint;

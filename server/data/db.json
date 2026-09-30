@@ -20,7 +20,7 @@
       "id": "camp-current",
       "name": "Service Master of the Month - Petron San Pedro",
       "start_date": "2026-09-01T00:00:00+00:00",
-      "end_date": "2026-09-30T00:00:00+00:00",
+      "end_date": "2026-12-31T23:59:59+00:00",
       "active": true,
       "operating_hours_start": "06:00",
       "operating_hours_end": "22:00",

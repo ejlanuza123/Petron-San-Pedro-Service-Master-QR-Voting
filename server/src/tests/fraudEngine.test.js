@@ -9,6 +9,8 @@ describe('FraudEngine - Anti-Cheat Security Rules', () => {
     // Reset or ensure campaign rules are standard for tests
     const campaign = db.getActiveCampaign();
     db.updateCampaign(campaign.id, {
+      start_date: new Date(Date.now() - 86400000).toISOString(),
+      end_date: new Date(Date.now() + 30 * 86400000).toISOString(),
       kill_switch: false,
       test_mode: false,
       enforce_operating_hours: false, // disable hours check for repeatable test runs

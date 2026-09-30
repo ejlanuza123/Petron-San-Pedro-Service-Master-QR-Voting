@@ -27,6 +27,12 @@ if (fs.existsSync(clientDir)) {
 // 2. Ensure public folder exists
 if (!fs.existsSync(publicDir)) {
   fs.mkdirSync(publicDir, { recursive: true });
+} else {
+  // Clean old assets directory to remove stale hashed chunks
+  const publicAssetsDir = path.join(publicDir, 'assets');
+  if (fs.existsSync(publicAssetsDir)) {
+    fs.rmSync(publicAssetsDir, { recursive: true, force: true });
+  }
 }
 
 // 3. Copy client/dist assets into public/ so root static hosting has everything

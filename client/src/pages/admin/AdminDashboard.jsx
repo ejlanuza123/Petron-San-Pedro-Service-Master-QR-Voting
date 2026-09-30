@@ -1,21 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { 
   LayoutDashboard, Award, BarChart3, ShieldAlert, FileText, 
-  QrCode, Users, Settings, RefreshCw, Power, Sparkles 
+  QrCode, Users, Settings, RefreshCw, Power, Sparkles, Database 
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
-// Subviews
+// Subviews - Eagerly loaded for instant first render
 import DashboardOverview from './DashboardOverview';
 import LeaderboardView from './LeaderboardView';
-import AnalyticsView from './AnalyticsView';
-import FraudQueuePage from './FraudQueuePage';
-import AuditLogPage from './AuditLogPage';
-import QRStudioPage from './QRStudioPage';
-import SMManagementPage from './SMManagementPage';
-import SettingsPage from './SettingsPage';
+
+// Subviews - Code-split & lazily loaded to minimize mobile bundle size
+const AnalyticsView = lazy(() => import('./AnalyticsView'));
+const FraudQueuePage = lazy(() => import('./FraudQueuePage'));
+const AuditLogPage = lazy(() => import('./AuditLogPage'));
+const QRStudioPage = lazy(() => import('./QRStudioPage'));
+const SMManagementPage = lazy(() => import('./SMManagementPage'));
+const SettingsPage = lazy(() => import('./SettingsPage'));
+
+function TabLoadingFallback() {
+  return (
+    <div className="py-20 text-center flex flex-col items-center justify-center">
+      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
+      <p className="text-xs text-slate-400">Loading module...</p>
+    </div>
+  );
+}
 
 export default function AdminDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -23,6 +34,7 @@ export default function AdminDashboard({ onLogout }) {
   const [campaign, setCampaign] = useState(null);
   const [sms, setSms] = useState([]);
   const [flaggedVotes, setFlaggedVotes] = useState([]);
+  const [dbStatus, setDbStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const { user } = useAuth();
@@ -31,17 +43,19 @@ export default function AdminDashboard({ onLogout }) {
   const loadData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const [statsRes, campRes, smsRes, flaggedRes] = await Promise.all([
+      const [statsRes, campRes, smsRes, flaggedRes, dbRes] = await Promise.all([
         api.getStats(),
         api.getCampaign(),
         api.getSMs({ all: true }),
-        api.getFlaggedVotes()
+        api.getFlaggedVotes(),
+        api.getDatabaseStatus().catch(() => null)
       ]);
 
       setStats(statsRes);
       setCampaign(campRes.campaign);
       setSms(smsRes.sms || []);
       setFlaggedVotes(flaggedRes.flagged || []);
+      if (dbRes) setDbStatus(dbRes);
     } catch (err) {
       if (!silent) error(err.message || 'Failed to refresh admin data');
     } finally {
@@ -115,6 +129,21 @@ export default function AdminDashboard({ onLogout }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {dbStatus && (
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                dbStatus.connected
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+              }`}
+              title={`Provider: ${dbStatus.provider || 'local'}\nHost: ${dbStatus.database_url || 'local'}\nVotes in Store: ${dbStatus.votes_count ?? 0}\nSMs in Store: ${dbStatus.sms_count ?? 0}`}
+            >
+              <Database className="w-3.5 h-3.5 shrink-0" />
+              <span className={`w-1.5 h-1.5 rounded-full ${dbStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className="hidden sm:inline">{dbStatus.connected ? 'Supabase Cloud' : 'Local Fallback'}</span>
+            </div>
+          )}
+
           <button
             onClick={() => loadData(false)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:text-white border border-slate-700 transition-colors"
@@ -178,41 +207,43 @@ export default function AdminDashboard({ onLogout }) {
             />
           )}
 
-          {activeTab === 'analytics' && (
-            <AnalyticsView stats={stats} />
-          )}
+          <Suspense fallback={<TabLoadingFallback />}>
+            {activeTab === 'analytics' && (
+              <AnalyticsView stats={stats} />
+            )}
 
-          {activeTab === 'fraud' && (
-            <FraudQueuePage
-              flaggedVotes={flaggedVotes}
-              onVoteReviewed={() => loadData(true)}
-            />
-          )}
+            {activeTab === 'fraud' && (
+              <FraudQueuePage
+                flaggedVotes={flaggedVotes}
+                onVoteReviewed={() => loadData(true)}
+              />
+            )}
 
-          {activeTab === 'audit' && (
-            <AuditLogPage branches={branches} />
-          )}
+            {activeTab === 'audit' && (
+              <AuditLogPage branches={branches} />
+            )}
 
-          {activeTab === 'qr' && (
-            <QRStudioPage
-              sms={sms}
-              campaign={campaign}
-            />
-          )}
+            {activeTab === 'qr' && (
+              <QRStudioPage
+                sms={sms}
+                campaign={campaign}
+              />
+            )}
 
-          {activeTab === 'sms' && (
-            <SMManagementPage
-              sms={sms}
-              onRefresh={() => loadData(true)}
-            />
-          )}
+            {activeTab === 'sms' && (
+              <SMManagementPage
+                sms={sms}
+                onRefresh={() => loadData(true)}
+              />
+            )}
 
-          {activeTab === 'settings' && (
-            <SettingsPage
-              campaign={campaign}
-              onRefresh={() => loadData(true)}
-            />
-          )}
+            {activeTab === 'settings' && (
+              <SettingsPage
+                campaign={campaign}
+                onRefresh={() => loadData(true)}
+              />
+            )}
+          </Suspense>
         </>
       )}
     </div>
