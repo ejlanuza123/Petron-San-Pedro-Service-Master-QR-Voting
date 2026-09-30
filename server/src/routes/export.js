@@ -1,6 +1,11 @@
 import express from 'express';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { 
+  generateVotesExcel, 
+  generateLeaderboardExcel, 
+  generateSystemAuditExcel 
+} from '../services/excelExportService.js';
 
 const router = express.Router();
 
@@ -11,10 +16,20 @@ const escapeCSV = (val) => {
   return `"${str}"`;
 };
 
-// GET /api/export/csv - Export complete votes audit trail
-router.get('/csv', authenticateToken, (req, res) => {
-  const { status, branch, mode } = req.query;
-  const votes = db.getVotes({ status, branch, mode });
+// GET /api/export/csv & /api/export/xlsx - Export complete votes audit trail
+const handleVotesExport = async (req, res) => {
+  const { status, branch, mode, startDate, endDate, includeTest } = req.query;
+  const format = req.query.format || (req.path.includes('xlsx') ? 'xlsx' : 'csv');
+  const excludeTest = includeTest !== 'true';
+
+  const votes = db.getVotes({ status, branch, mode, startDate, endDate, excludeTest });
+
+  if (format === 'xlsx') {
+    const buffer = await generateVotesExcel(votes, { status, branch, mode });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="votes-audit-export-${Date.now()}.xlsx"`);
+    return res.send(buffer);
+  }
 
   const headers = [
     'Vote ID',
@@ -52,17 +67,26 @@ router.get('/csv', authenticateToken, (req, res) => {
     escapeCSV(v.is_test ? 'YES' : 'NO')
   ].join(','));
 
-  const csvContent = [headers.join(','), ...rows].join('\r\n');
+  // Prepend UTF-8 BOM for clean Excel UTF-8 recognition
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
 
-  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="votes-audit-export-${Date.now()}.csv"`);
   res.send(csvContent);
-});
+};
 
-// GET /api/export/leaderboard - Export leaderboard summary
-router.get('/leaderboard', authenticateToken, (req, res) => {
-  const allVotes = db.getVotes({ excludeTest: true });
-  const sms = db.getSMs({ all: true });
+router.get('/csv', authenticateToken, handleVotesExport);
+router.get('/xlsx', authenticateToken, handleVotesExport);
+
+// GET /api/export/leaderboard - Export leaderboard summary (CSV & XLSX)
+router.get('/leaderboard', authenticateToken, async (req, res) => {
+  const branch = req.query.branch;
+  const format = req.query.format || (req.path.includes('xlsx') ? 'xlsx' : 'csv');
+  const allVotes = db.getVotes({ excludeTest: true, branch: (branch && branch !== 'All') ? branch : undefined });
+  let sms = db.getSMs({ all: true });
+  if (branch && branch !== 'All') {
+    sms = sms.filter(s => s.branch && s.branch.toLowerCase() === branch.toLowerCase());
+  }
   const validVotes = allVotes.filter(v => v.status === 'valid');
 
   const tally = {};
@@ -87,6 +111,14 @@ router.get('/leaderboard', authenticateToken, (req, res) => {
   });
 
   const sorted = Object.values(tally).sort((a, b) => b.valid - a.valid);
+  const branchSlug = branch && branch !== 'All' ? `-${branch.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : '';
+
+  if (format === 'xlsx') {
+    const buffer = await generateLeaderboardExcel(sorted, branch || 'All', validVotes.length);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="sm-leaderboard${branchSlug}-${Date.now()}.xlsx"`);
+    return res.send(buffer);
+  }
 
   const headers = ['Rank', 'Service Master Name', 'Branch', 'Station', 'Shift', 'Valid Votes', 'Flagged Votes', 'Total Received', 'Share %'];
   const rows = sorted.map((row, idx) => {
@@ -104,11 +136,40 @@ router.get('/leaderboard', authenticateToken, (req, res) => {
     ].join(',');
   });
 
-  const csvContent = [headers.join(','), ...rows].join('\r\n');
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
 
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="sm-leaderboard-${Date.now()}.csv"`);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="sm-leaderboard${branchSlug}-${Date.now()}.csv"`);
+  res.send(csvContent);
+});
+
+// GET /api/export/system-logs - Export security audit logs (CSV & XLSX)
+router.get('/system-logs', authenticateToken, async (req, res) => {
+  const action = req.query.action;
+  const format = req.query.format || (req.path.includes('xlsx') ? 'xlsx' : 'csv');
+  let logs = db.getAuditLogs(500);
+  if (action) {
+    logs = logs.filter(l => l.action === action);
+  }
+
+  if (format === 'xlsx') {
+    const buffer = await generateSystemAuditExcel(logs, action);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="system-audit-logs-${Date.now()}.xlsx"`);
+    return res.send(buffer);
+  }
+
+  const headers = ['Log ID', 'Timestamp', 'Admin / Initiator', 'Action', 'Target ID', 'Details'];
+  const rows = logs.map(l => [
+    escapeCSV(l.id), escapeCSV(l.timestamp), escapeCSV(l.admin_id),
+    escapeCSV(l.action), escapeCSV(l.target_id || ''), escapeCSV(l.details || '')
+  ].join(','));
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="system-audit-logs-${Date.now()}.csv"`);
   res.send(csvContent);
 });
 
 export default router;
+

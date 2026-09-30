@@ -9,6 +9,7 @@ import FraudEngine from './services/fraudEngine.js';
 import QRService from './services/qrService.js';
 import { generateToken, generatePairingToken, verifyPairingToken } from './middleware/auth.js';
 import supabase, { isSupabaseConfigured } from './db/supabase.js';
+import { generateVotesExcel, generateLeaderboardExcel, generateSystemAuditExcel } from './services/excelExportService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -692,8 +693,8 @@ export async function handleRequest(req, res) {
       return res.json({ count: batch.length, batch });
     }
 
-    // 8. Exports (CSV)
-    if (pathname === '/api/export/csv' && method === 'GET') {
+    // 8. Exports (CSV & XLSX with Design)
+    if ((pathname === '/api/export/csv' || pathname === '/api/export/xlsx' || pathname === '/api/export/excel') && method === 'GET') {
       const user = authenticate(req);
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
 
@@ -703,8 +704,19 @@ export async function handleRequest(req, res) {
       const startDate = parsedUrl.searchParams.get('startDate') || undefined;
       const endDate = parsedUrl.searchParams.get('endDate') || undefined;
       const excludeTest = parsedUrl.searchParams.get('includeTest') !== 'true';
+      const format = parsedUrl.searchParams.get('format') || (pathname.includes('xlsx') || pathname.includes('excel') ? 'xlsx' : 'csv');
 
       const votes = db.getVotes({ status, branch, mode, startDate, endDate, excludeTest });
+
+      if (format === 'xlsx') {
+        const buffer = await generateVotesExcel(votes, { status, branch, mode });
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="votes-audit-${Date.now()}.xlsx"`
+        });
+        return res.end(buffer);
+      }
+
       const headers = ['Vote ID', 'SM Name', 'Branch', 'Timestamp', 'Mode', 'Status', 'Flag Reason', 'Reviewer', 'Notes', 'Fingerprint', 'IP Address', 'User Agent'];
       const rows = votes.map(v => [
         escapeCSV(v.id), escapeCSV(v.sm_name), escapeCSV(v.sm_branch), escapeCSV(v.timestamp),
@@ -712,7 +724,7 @@ export async function handleRequest(req, res) {
         escapeCSV(v.reviewed_by || ''), escapeCSV(v.review_notes || ''),
         escapeCSV(v.voter_fingerprint), escapeCSV(v.ip_address), escapeCSV(v.user_agent)
       ].join(','));
-      const csv = [headers.join(','), ...rows].join('\r\n');
+      const csv = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="votes-audit-${Date.now()}.csv"`
@@ -725,6 +737,7 @@ export async function handleRequest(req, res) {
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
 
       const branch = parsedUrl.searchParams.get('branch');
+      const format = parsedUrl.searchParams.get('format') || 'csv';
       const votes = db.getVotes({ excludeTest: true, branch: (branch && branch !== 'All') ? branch : undefined });
       let sms = db.getSMs({ all: true });
       if (branch && branch !== 'All') {
@@ -733,21 +746,32 @@ export async function handleRequest(req, res) {
       const validVotes = votes.filter(v => v.status === 'valid');
 
       const tally = {};
-      sms.forEach(s => { tally[s.id] = { name: s.name, branch: s.branch, station: s.station, valid: 0, total: 0 }; });
+      sms.forEach(s => { tally[s.id] = { name: s.name, branch: s.branch, station: s.station, shift: s.shift, valid: 0, flagged: 0, total: 0 }; });
       votes.forEach(v => {
         if (tally[v.sm_id]) {
           tally[v.sm_id].total++;
           if (v.status === 'valid') tally[v.sm_id].valid++;
+          if (v.status === 'flagged') tally[v.sm_id].flagged++;
         }
       });
       const sorted = Object.values(tally).sort((a, b) => b.valid - a.valid);
+      const branchSlug = branch && branch !== 'All' ? `-${branch.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : '';
+
+      if (format === 'xlsx') {
+        const buffer = await generateLeaderboardExcel(sorted, branch || 'All', validVotes.length);
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="sm-leaderboard${branchSlug}-${Date.now()}.xlsx"`
+        });
+        return res.end(buffer);
+      }
+
       const headers = ['Rank', 'SM Name', 'Branch', 'Station', 'Valid Votes', 'Total Received', 'Share %'];
       const rows = sorted.map((row, idx) => {
         const share = validVotes.length > 0 ? ((row.valid / validVotes.length) * 100).toFixed(2) : '0.00';
         return [idx + 1, escapeCSV(row.name), escapeCSV(row.branch), escapeCSV(row.station), row.valid, row.total, `"${share}%"`].join(',');
       });
-      const csv = [headers.join(','), ...rows].join('\r\n');
-      const branchSlug = branch && branch !== 'All' ? `-${branch.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : '';
+      const csv = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="sm-leaderboard${branchSlug}-${Date.now()}.csv"`
@@ -760,9 +784,19 @@ export async function handleRequest(req, res) {
       if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
 
       const action = parsedUrl.searchParams.get('action') || undefined;
+      const format = parsedUrl.searchParams.get('format') || 'csv';
       let logs = db.getAuditLogs(500);
       if (action) {
         logs = logs.filter(l => l.action === action);
+      }
+
+      if (format === 'xlsx') {
+        const buffer = await generateSystemAuditExcel(logs, action);
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="system-audit-logs-${Date.now()}.xlsx"`
+        });
+        return res.end(buffer);
       }
 
       const headers = ['Log ID', 'Timestamp', 'Admin / Initiator', 'Action', 'Target ID', 'Details'];
@@ -770,7 +804,7 @@ export async function handleRequest(req, res) {
         escapeCSV(l.id), escapeCSV(l.timestamp), escapeCSV(l.admin_id),
         escapeCSV(l.action), escapeCSV(l.target_id || ''), escapeCSV(l.details || '')
       ].join(','));
-      const csv = [headers.join(','), ...rows].join('\r\n');
+      const csv = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="system-audit-logs-${Date.now()}.csv"`

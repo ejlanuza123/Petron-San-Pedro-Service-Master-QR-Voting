@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Award, Download, Search, MapPin, Clock, Filter, Loader2 } from 'lucide-react';
+import { Award, Download, Search, MapPin, Clock, Filter, Loader2, FileSpreadsheet } from 'lucide-react';
 import api, { triggerFileDownload } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 
 export default function LeaderboardView({ leaderboard = [], branches = [] }) {
   const [search, setSearch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('All');
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState(null); // null | 'xlsx' | 'csv'
   const { success, error, info } = useToast();
 
   const filtered = leaderboard.filter((item) => {
@@ -18,18 +18,20 @@ export default function LeaderboardView({ leaderboard = [], branches = [] }) {
     return matchesBranch && matchesSearch;
   });
 
-  const handleExport = async () => {
+  const handleExport = async (format = 'xlsx') => {
     try {
-      setExporting(true);
-      const blob = await api.exportLeaderboardCSV(selectedBranch);
+      setExporting(format);
+      const isXlsx = format === 'xlsx';
+      const blob = await api.exportLeaderboard(selectedBranch, format);
       const branchSlug = selectedBranch !== 'All' ? `-${selectedBranch.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : '';
       const dateStr = new Date().toISOString().split('T')[0];
-      triggerFileDownload(blob, `sm-leaderboard${branchSlug}-${dateStr}.csv`);
-      success(`Leaderboard report exported successfully (${selectedBranch})`);
+      const filename = `sm-leaderboard${branchSlug}-${dateStr}.${isXlsx ? 'xlsx' : 'csv'}`;
+      triggerFileDownload(blob, filename);
+      success(`Leaderboard exported as ${isXlsx ? 'designed Excel (.xlsx)' : 'CSV'} (${selectedBranch})`);
     } catch (err) {
       error(err.message || 'Failed to export leaderboard');
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -47,18 +49,26 @@ export default function LeaderboardView({ leaderboard = [], branches = [] }) {
           </p>
         </div>
 
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 transition-colors shadow-sm"
-        >
-          {exporting ? (
-            <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-          ) : (
-            <Download className="w-4 h-4 text-blue-400" />
-          )}
-          <span>{exporting ? 'Exporting...' : 'Export Leaderboard (CSV)'}</span>
-        </button>
+        <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 shadow-md">
+          <button
+            onClick={() => handleExport('xlsx')}
+            disabled={Boolean(exporting)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-sm shadow-emerald-600/20 transition-all"
+            title="Export styled Excel workbook with formatted headers, podium highlights, and vote share"
+          >
+            {exporting === 'xlsx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+            <span>Excel (.xlsx)</span>
+          </button>
+          <button
+            onClick={() => handleExport('csv')}
+            disabled={Boolean(exporting)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 hover:text-white transition-all"
+            title="Export standard CSV leaderboard"
+          >
+            {exporting === 'csv' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span>CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}

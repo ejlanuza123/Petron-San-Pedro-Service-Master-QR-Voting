@@ -246,8 +246,9 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Data Exports (CSV)
-  exportVotesCSV: async (filters = {}) => {
+  // Data Exports (CSV & Designer XLSX)
+  exportVotes: async (filters = {}) => {
+    const format = filters.format || 'csv';
     const query = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '' && v !== 'undefined' && v !== 'null') query.set(k, v);
@@ -257,35 +258,61 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Failed to export votes CSV');
+      throw new Error(err.message || `Failed to export votes ${format.toUpperCase()}`);
     }
     return res.blob();
   },
 
-  exportLeaderboardCSV: async (branch) => {
+  exportVotesCSV: async (filters = {}) => {
+    return api.exportVotes({ ...filters, format: 'csv' });
+  },
+
+  exportVotesXLSX: async (filters = {}) => {
+    return api.exportVotes({ ...filters, format: 'xlsx' });
+  },
+
+  exportLeaderboard: async (branch, format = 'csv') => {
     const query = new URLSearchParams();
     if (branch && branch !== 'All') query.set('branch', branch);
+    if (format) query.set('format', format);
     const res = await fetch(`/api/export/leaderboard?${query.toString()}`, {
       headers: { ...getAuthHeaders() }
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Failed to export leaderboard CSV');
+      throw new Error(err.message || `Failed to export leaderboard ${format.toUpperCase()}`);
     }
     return res.blob();
   },
 
-  exportSystemLogsCSV: async (action) => {
+  exportLeaderboardCSV: async (branch) => {
+    return api.exportLeaderboard(branch, 'csv');
+  },
+
+  exportLeaderboardXLSX: async (branch) => {
+    return api.exportLeaderboard(branch, 'xlsx');
+  },
+
+  exportSystemLogs: async (action, format = 'csv') => {
     const query = new URLSearchParams();
     if (action) query.set('action', action);
+    if (format) query.set('format', format);
     const res = await fetch(`/api/export/system-logs?${query.toString()}`, {
       headers: { ...getAuthHeaders() }
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Failed to export system logs CSV');
+      throw new Error(err.message || `Failed to export system logs ${format.toUpperCase()}`);
     }
     return res.blob();
+  },
+
+  exportSystemLogsCSV: async (action) => {
+    return api.exportSystemLogs(action, 'csv');
+  },
+
+  exportSystemLogsXLSX: async (action) => {
+    return api.exportSystemLogs(action, 'xlsx');
   }
 };
 

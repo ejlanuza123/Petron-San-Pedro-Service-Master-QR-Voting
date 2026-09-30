@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, Download, Search, Filter, ShieldCheck, 
-  AlertTriangle, XCircle, RefreshCw, Calendar, Loader2, RotateCcw 
+  AlertTriangle, XCircle, RefreshCw, Calendar, Loader2, RotateCcw,
+  FileSpreadsheet
 } from 'lucide-react';
 import api, { triggerFileDownload } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
@@ -12,7 +13,7 @@ export default function AuditLogPage({ branches = [] }) {
   const [systemLogs, setSystemLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingSystem, setLoadingSystem] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState(null); // null | 'xlsx' | 'csv'
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
@@ -98,37 +99,42 @@ export default function AuditLogPage({ branches = [] }) {
     );
   });
 
-  const handleExportCSV = async () => {
+  const handleExportVotes = async (format = 'xlsx') => {
     try {
-      setExporting(true);
-      const blob = await api.exportVotesCSV({
+      setExporting(format);
+      const isXlsx = format === 'xlsx';
+      const blob = await api.exportVotes({
         status: statusFilter || undefined,
         branch: branchFilter || undefined,
         mode: modeFilter || undefined,
         startDate: startDate ? new Date(startDate).toISOString() : undefined,
-        endDate: endDate ? new Date(endDate + 'T23:59:59').toISOString() : undefined
+        endDate: endDate ? new Date(endDate + 'T23:59:59').toISOString() : undefined,
+        format
       });
       const dateStr = new Date().toISOString().split('T')[0];
-      triggerFileDownload(blob, `votes-audit-${dateStr}.csv`);
-      success('Audit logs CSV downloaded successfully');
+      const filename = `votes-audit-${dateStr}.${isXlsx ? 'xlsx' : 'csv'}`;
+      triggerFileDownload(blob, filename);
+      success(`Ballot registry exported as ${isXlsx ? 'designed Excel (.xlsx)' : 'CSV'}`);
     } catch (err) {
       error(err.message || 'Failed to export audit logs');
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
-  const handleExportSystemLogs = async () => {
+  const handleExportSystemLogs = async (format = 'xlsx') => {
     try {
-      setExporting(true);
-      const blob = await api.exportSystemLogsCSV();
+      setExporting(format);
+      const isXlsx = format === 'xlsx';
+      const blob = await api.exportSystemLogs(undefined, format);
       const dateStr = new Date().toISOString().split('T')[0];
-      triggerFileDownload(blob, `system-audit-logs-${dateStr}.csv`);
-      success('System security audit trail downloaded successfully');
+      const filename = `system-audit-logs-${dateStr}.${isXlsx ? 'xlsx' : 'csv'}`;
+      triggerFileDownload(blob, filename);
+      success(`System security logs exported as ${isXlsx ? 'designed Excel (.xlsx)' : 'CSV'}`);
     } catch (err) {
       error(err.message || 'Failed to export system audit logs');
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -148,23 +154,47 @@ export default function AuditLogPage({ branches = [] }) {
 
         <div className="flex items-center gap-2">
           {logView === 'ballots' ? (
-            <button
-              onClick={handleExportCSV}
-              disabled={exporting}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-md shadow-blue-600/20 transition-colors"
-            >
-              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              <span>{exporting ? 'Exporting...' : 'Export to CSV'}</span>
-            </button>
+            <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 shadow-md">
+              <button
+                onClick={() => handleExportVotes('xlsx')}
+                disabled={Boolean(exporting)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-sm shadow-emerald-600/20 transition-all"
+                title="Export styled Excel workbook with formatted headers, status badges, and executive summary"
+              >
+                {exporting === 'xlsx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                <span>Excel (.xlsx)</span>
+              </button>
+              <button
+                onClick={() => handleExportVotes('csv')}
+                disabled={Boolean(exporting)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 hover:text-white transition-all"
+                title="Export standard CSV spreadsheet"
+              >
+                {exporting === 'csv' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>CSV</span>
+              </button>
+            </div>
           ) : (
-            <button
-              onClick={handleExportSystemLogs}
-              disabled={exporting}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-md shadow-blue-600/20 transition-colors"
-            >
-              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              <span>{exporting ? 'Exporting...' : 'Export System Audit (CSV)'}</span>
-            </button>
+            <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 shadow-md">
+              <button
+                onClick={() => handleExportSystemLogs('xlsx')}
+                disabled={Boolean(exporting)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-sm shadow-emerald-600/20 transition-all"
+                title="Export styled System Security Audit Excel workbook"
+              >
+                {exporting === 'xlsx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                <span>Excel (.xlsx)</span>
+              </button>
+              <button
+                onClick={() => handleExportSystemLogs('csv')}
+                disabled={Boolean(exporting)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 hover:text-white transition-all"
+                title="Export standard system logs CSV"
+              >
+                {exporting === 'csv' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>CSV</span>
+              </button>
+            </div>
           )}
           <button
             onClick={handleRefresh}

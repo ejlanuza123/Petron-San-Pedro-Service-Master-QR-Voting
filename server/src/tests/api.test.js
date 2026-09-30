@@ -131,6 +131,7 @@ describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
     let statusCode = 200;
     let responseHeaders = {};
     let responseBody = '';
+    const rawChunks = [];
 
     const res = {
       writeHead(code, hdrs = {}) {
@@ -144,10 +145,14 @@ describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
         responseHeaders[name.toLowerCase()] = val;
       },
       end(chunk) {
-        if (chunk) responseBody += chunk;
+        if (chunk) {
+          rawChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          responseBody += chunk;
+        }
       },
       get statusCode() { return statusCode; },
       get headers() { return responseHeaders; },
+      get rawBuffer() { return Buffer.concat(rawChunks); },
       get body() {
         try {
           return JSON.parse(responseBody);
@@ -366,6 +371,64 @@ describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
     assert.ok(res.headers['content-type'].includes('text/csv'));
     assert.ok(res.body.includes('Log ID'));
     assert.ok(res.body.includes('Admin / Initiator'));
+  });
+
+  test('Export Handler serves designed Excel (.xlsx) votes file with proper MIME type and binary stream', async () => {
+    const { default: exportHandler } = await import('../../../api/export.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: '/api/export?subpath=csv&format=xlsx',
+      query: { subpath: 'csv', format: 'xlsx' },
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await exportHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('spreadsheetml.sheet'));
+    assert.ok(res.rawBuffer.length > 500, 'Excel buffer should contain generated XLSX binary data');
+  });
+
+  test('Export Handler serves designed Excel (.xlsx) leaderboard file', async () => {
+    const { default: exportHandler } = await import('../../../api/export.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: `/api/export?subpath=leaderboard&format=xlsx&token=${token}`,
+      query: { subpath: 'leaderboard', format: 'xlsx', token }
+    });
+
+    await exportHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('spreadsheetml.sheet'));
+    assert.ok(res.rawBuffer.length > 500);
+  });
+
+  test('Export Handler serves designed Excel (.xlsx) system security logs file', async () => {
+    const { default: exportHandler } = await import('../../../api/export.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    const { req, res } = createMockReqRes({
+      method: 'GET',
+      url: `/api/export?subpath=system-logs&format=xlsx&token=${token}`,
+      query: { subpath: 'system-logs', format: 'xlsx', token }
+    });
+
+    await exportHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('spreadsheetml.sheet'));
+    assert.ok(res.rawBuffer.length > 500);
   });
 
   test('Votes Handler ignores undefined and null query strings in getVotes', async () => {
