@@ -231,6 +231,45 @@ export async function handleRequest(req, res) {
       return res.json({ user: { id: admin.id, username: admin.username, name: admin.name, role: admin.role } });
     }
 
+    // 2c. Auth: Change Password
+    if (pathname === '/api/auth/change-password' && method === 'POST') {
+      const user = authenticate(req);
+      if (!user) return res.error('Unauthorized', 401, 'UNAUTHORIZED');
+
+      const { currentPassword, newPassword } = body;
+      if (!currentPassword || !newPassword) {
+        return res.error('Current password and new password are required', 400, 'MISSING_FIELDS');
+      }
+
+      if (newPassword.length < 6) {
+        return res.error('New password must be at least 6 characters long', 400, 'WEAK_PASSWORD');
+      }
+
+      if (currentPassword === newPassword) {
+        return res.error('New password must be different from current password', 400, 'SAME_PASSWORD');
+      }
+
+      const admin = db.getAdminById(user.id) || db.getAdminByUsername(user.username);
+      if (!admin) return res.error('Admin account not found', 404, 'NOT_FOUND');
+
+      const isValid = verifyPassword(currentPassword, admin.password_hash);
+      if (!isValid) {
+        return res.error('Current password is incorrect', 401, 'INVALID_CURRENT_PASSWORD');
+      }
+
+      const newHash = hashPassword(newPassword);
+      await db.updateAdminPassword(admin.id, newHash);
+
+      await db.logAction({
+        admin_id: admin.id,
+        action: 'ADMIN_CHANGE_PASSWORD',
+        target_id: admin.id,
+        details: `Admin ${admin.username} changed password successfully`
+      });
+
+      return res.json({ success: true, message: 'Password updated successfully' });
+    }
+
     // 3. Campaign & Status
     if (pathname === '/api/campaign' && method === 'GET') {
       const campaign = db.getActiveCampaign();

@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import db from '../db/database.js';
@@ -514,6 +515,102 @@ describe('Vercel Serverless Functions & Subpath Routing Verification', () => {
     const blockedLog = db.getAuditLogs(1)[0];
     assert.equal(blockedLog.action, 'VOTE_BLOCKED');
     assert.equal(blockedLog.target_id, sm.id);
+  });
+
+  test('Auth Handler enforces change-password authentication, validation, and updates credentials', async () => {
+    const { default: authHandler } = await import('../../../api/auth.js');
+    const { generateToken } = await import('../middleware/auth.js');
+    const admin = db.getAdminByUsername('admin');
+    const token = generateToken({ id: admin.id, username: admin.username, role: admin.role, name: admin.name });
+
+    // 1. Unauthorized attempt (no token) -> 401
+    const { req: noAuthReq, res: noAuthRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=change-password',
+      query: { subpath: 'change-password' },
+      body: { currentPassword: 'admin123', newPassword: 'newSecretPassword123' }
+    });
+    await authHandler(noAuthReq, noAuthRes);
+    assert.equal(noAuthRes.statusCode, 401);
+
+    // 2. Incorrect current password -> 401
+    const { req: wrongCurrentReq, res: wrongCurrentRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=change-password',
+      query: { subpath: 'change-password' },
+      headers: { authorization: `Bearer ${token}` },
+      body: { currentPassword: 'wrongPassword123', newPassword: 'newSecretPassword123' }
+    });
+    await authHandler(wrongCurrentReq, wrongCurrentRes);
+    assert.equal(wrongCurrentRes.statusCode, 401);
+    assert.equal(wrongCurrentRes.body.error, 'INVALID_CURRENT_PASSWORD');
+    assert.match(wrongCurrentRes.body.message, /Current password is incorrect/i);
+
+    // 3. New password too short (< 6 chars) -> 400
+    const { req: shortReq, res: shortRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=change-password',
+      query: { subpath: 'change-password' },
+      headers: { authorization: `Bearer ${token}` },
+      body: { currentPassword: 'admin123', newPassword: '123' }
+    });
+    await authHandler(shortReq, shortRes);
+    assert.equal(shortRes.statusCode, 400);
+    assert.equal(shortRes.body.error, 'WEAK_PASSWORD');
+    assert.match(shortRes.body.message, /at least 6 characters/i);
+
+    // 4. New password identical to current -> 400
+    const { req: sameReq, res: sameRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=change-password',
+      query: { subpath: 'change-password' },
+      headers: { authorization: `Bearer ${token}` },
+      body: { currentPassword: 'admin123', newPassword: 'admin123' }
+    });
+    await authHandler(sameReq, sameRes);
+    assert.equal(sameRes.statusCode, 400);
+    assert.equal(sameRes.body.error, 'SAME_PASSWORD');
+    assert.match(sameRes.body.message, /must be different/i);
+
+    // 5. Successful password change -> 200
+    const testNewPassword = 'newSecurePassword456';
+    const { req: successReq, res: successRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=change-password',
+      query: { subpath: 'change-password' },
+      headers: { authorization: `Bearer ${token}` },
+      body: { currentPassword: 'admin123', newPassword: testNewPassword }
+    });
+    await authHandler(successReq, successRes);
+    assert.equal(successRes.statusCode, 200);
+    assert.ok(successRes.body.success);
+
+    // Verify audit log was recorded
+    const latestLog = db.getAuditLogs(1)[0];
+    assert.equal(latestLog.action, 'ADMIN_CHANGE_PASSWORD');
+
+    // 6. Verify login with the new password
+    const { req: newLoginReq, res: newLoginRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=login',
+      query: { subpath: 'login' },
+      body: { username: 'admin', password: testNewPassword }
+    });
+    await authHandler(newLoginReq, newLoginRes);
+    assert.equal(newLoginRes.statusCode, 200);
+    assert.ok(newLoginRes.body.token);
+
+    // 7. Revert password back to admin123
+    const newToken = newLoginRes.body.token;
+    const { req: revertReq, res: revertRes } = createMockReqRes({
+      method: 'POST',
+      url: '/api/auth?subpath=change-password',
+      query: { subpath: 'change-password' },
+      headers: { authorization: `Bearer ${newToken}` },
+      body: { currentPassword: testNewPassword, newPassword: 'admin123' }
+    });
+    await authHandler(revertReq, revertRes);
+    assert.equal(revertRes.statusCode, 200);
   });
 });
 

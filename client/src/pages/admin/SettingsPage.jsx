@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Shield, Clock, Zap, Power, AlertTriangle, Save, Sparkles } from 'lucide-react';
+import { 
+  Settings, Shield, Clock, Zap, Power, AlertTriangle, Save, Sparkles,
+  KeyRound, Lock, Eye, EyeOff, CheckCircle2, ShieldCheck, Loader2
+} from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 
@@ -19,6 +22,16 @@ export default function SettingsPage({ campaign, onRefresh }) {
   });
 
   const [saving, setSaving] = useState(false);
+
+  // Change Password State
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
   const { success, error } = useToast();
 
   useEffect(() => {
@@ -56,6 +69,41 @@ export default function SettingsPage({ campaign, onRefresh }) {
       setSaving(false);
     }
   };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    if (!currentPassword.trim()) {
+      return error('Please enter your current password.');
+    }
+    if (!newPassword.trim()) {
+      return error('Please enter a new password.');
+    }
+    if (newPassword.length < 6) {
+      return error('New password must be at least 6 characters long.');
+    }
+    if (newPassword === currentPassword) {
+      return error('New password must be different from current password.');
+    }
+    if (newPassword !== confirmPassword) {
+      return error('New password and confirmation do not match.');
+    }
+
+    try {
+      setUpdatingPassword(true);
+      const res = await api.changePassword(currentPassword, newPassword);
+      success(res.message || 'Admin password updated successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      error(err.message || 'Failed to update password');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
+  const passwordsMatch = newPassword && confirmPassword && newPassword === confirmPassword;
+  const isLengthValid = newPassword.length >= 6;
 
   return (
     <div className="space-y-6">
@@ -284,6 +332,132 @@ export default function SettingsPage({ campaign, onRefresh }) {
           </button>
         </div>
       </form>
+
+      {/* Section 4: Admin Account Security & Password */}
+      <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between pb-3 border-t-0 sm:border-b sm:border-slate-700/60">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Administrator Account Security</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Change your admin credentials to maintain system security</p>
+            </div>
+          </div>
+          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Audited Action</span>
+          </span>
+        </div>
+
+        <form onSubmit={handlePasswordChange} className="space-y-4 text-xs pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Current Password */}
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">
+                Current Password <span className="text-rose-400">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showCurrent ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrent(!showCurrent)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showCurrent ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* New Password */}
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">
+                New Password <span className="text-rose-400">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showNew ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min 6 characters"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNew(!showNew)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showNew ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              {newPassword && (
+                <p className={`text-[10px] mt-1 ${isLengthValid ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {isLengthValid ? '✓ Minimum length satisfied' : 'Must be at least 6 characters'}
+                </p>
+              )}
+            </div>
+
+            {/* Confirm New Password */}
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">
+                Confirm New Password <span className="text-rose-400">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirm ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat new password"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showConfirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              {confirmPassword && (
+                <p className={`text-[10px] mt-1 ${passwordsMatch ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {passwordsMatch ? '✓ Passwords match' : 'Passwords do not match'}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+            <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span>Password change events are permanently logged in the audit trail.</span>
+            </p>
+            <button
+              type="submit"
+              disabled={updatingPassword || !currentPassword || !newPassword || !confirmPassword || !passwordsMatch || !isLengthValid}
+              className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-md shadow-blue-600/30 transition-all"
+            >
+              {updatingPassword ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Updating Password...</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Update Password</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

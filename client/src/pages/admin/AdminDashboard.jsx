@@ -1,11 +1,12 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { 
   LayoutDashboard, Award, BarChart3, ShieldAlert, FileText, 
-  QrCode, Users, Settings, RefreshCw, Power, Sparkles, Database 
+  QrCode, Users, Settings, RefreshCw, Power, Sparkles, Database, KeyRound 
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 
 // Subviews - Eagerly loaded for instant first render
 import DashboardOverview from './DashboardOverview';
@@ -37,6 +38,7 @@ export default function AdminDashboard({ onLogout }) {
   const [dbStatus, setDbStatus] = useState(null);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(15);
   const [loading, setLoading] = useState(true);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   const { user } = useAuth();
   const { success, error, warning } = useToast();
@@ -178,6 +180,15 @@ export default function AdminDashboard({ onLogout }) {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
+
+          <button
+            onClick={() => setIsPasswordModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 transition-colors"
+            title="Change Administrator Password"
+          >
+            <KeyRound className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">Password</span>
+          </button>
         </div>
       </div>
 
@@ -272,6 +283,12 @@ export default function AdminDashboard({ onLogout }) {
           </Suspense>
         </>
       )}
+
+      {/* Admin Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </div>
   );
 }

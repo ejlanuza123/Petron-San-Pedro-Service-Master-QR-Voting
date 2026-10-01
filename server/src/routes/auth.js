@@ -1,5 +1,5 @@
 import express from 'express';
-import db, { verifyPassword } from '../db/database.js';
+import db, { hashPassword, verifyPassword } from '../db/database.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -63,6 +63,45 @@ router.get('/me', authenticateToken, (req, res) => {
       last_login: admin.last_login
     }
   });
+});
+
+// POST /api/auth/change-password
+router.post('/change-password', authenticateToken, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'MISSING_FIELDS', message: 'Current password and new password are required' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'New password must be at least 6 characters long' });
+  }
+
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ error: 'SAME_PASSWORD', message: 'New password must be different from current password' });
+  }
+
+  const admin = db.getAdminById(req.user.id) || db.getAdminByUsername(req.user.username);
+  if (!admin) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: 'Admin account not found' });
+  }
+
+  const isValid = verifyPassword(currentPassword, admin.password_hash);
+  if (!isValid) {
+    return res.status(401).json({ error: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' });
+  }
+
+  const newHash = hashPassword(newPassword);
+  await db.updateAdminPassword(admin.id, newHash);
+
+  db.logAction({
+    admin_id: admin.id,
+    action: 'ADMIN_CHANGE_PASSWORD',
+    target_id: admin.id,
+    details: `Admin ${admin.username} changed password successfully`
+  });
+
+  res.json({ success: true, message: 'Password updated successfully' });
 });
 
 export default router;

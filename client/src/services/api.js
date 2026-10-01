@@ -63,6 +63,15 @@ export const api = {
     return handleResponse(res);
   },
 
+  changePassword: async (currentPassword, newPassword) => {
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    return handleResponse(res);
+  },
+
   // QR endpoints
   getGeneralQR: async (baseUrl) => {
     const params = new URLSearchParams({ format: 'json' });

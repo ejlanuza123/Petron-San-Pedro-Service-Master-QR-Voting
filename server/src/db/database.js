@@ -649,6 +649,10 @@ class Database {
     return this.data.admins.find(a => a.username === username);
   }
 
+  getAdminById(id) {
+    return this.data.admins.find(a => a.id === id);
+  }
+
   updateAdminLogin(id) {
     const admin = this.data.admins.find(a => a.id === id);
     if (admin) {
@@ -661,6 +665,26 @@ class Database {
         );
       }
     }
+  }
+
+  async updateAdminPassword(id, newPasswordHash) {
+    const admin = this.data.admins.find(a => a.id === id);
+    if (!admin) return null;
+    admin.password_hash = newPasswordHash;
+    admin.updated_at = new Date().toISOString();
+    this.save();
+
+    if (isSupabaseConfigured() && process.env.NODE_ENV !== 'test') {
+      try {
+        await supabase.update('admins', id, {
+          password_hash: newPasswordHash,
+          updated_at: admin.updated_at
+        });
+      } catch (err) {
+        console.error('[Supabase Admin Password Update Error]:', err.message);
+      }
+    }
+    return admin;
   }
 
   // --- Audit Logs ---
